@@ -1,29 +1,139 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { rooms as roomsApi, items as itemsApi, containers as containersApi, scan } from '../api/client';
 import { compressImage } from '../utils/imageCompression';
 import ItemCard from './ItemCard';
 import ContainerTree from './ContainerTree';
 
+// Persist the active (in-flight / ready / failed) scans per room so the queue
+// re-attaches after navigating away and back or a page refresh. The backend
+// keeps each scan running regardless; this just lets the UI pick them back up.
+const activeScansKey = (roomId) => `homeCatalogue:activeScans:${roomId}`;
+const readActiveScans = (roomId) => {
+  try {
+    return JSON.parse(localStorage.getItem(activeScansKey(roomId)) || '[]');
+  } catch {
+    return [];
+  }
+};
+const writeActiveScans = (roomId, sessionIds) =>
+  localStorage.setItem(activeScansKey(roomId), JSON.stringify(sessionIds));
+
+const POLL_INTERVAL_MS = 3000;
+
+// A single scan in the queue. Multiple can exist at once — each is independent.
+// status: 'pending' | 'processing' | 'completed' | 'failed'
+function Thumb({ url }) {
+  return url ? (
+    <img src={url} alt="Scan" className="w-12 h-12 rounded object-cover flex-shrink-0 border border-surface-800" />
+  ) : (
+    <div className="w-12 h-12 rounded bg-surface-800 flex-shrink-0 grid place-items-center">
+      <svg className="w-5 h-5 text-surface-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    </div>
+  );
+}
+
 export default function RoomView() {
   const { roomId } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const timersRef = useRef(new Map());   // per-session poll timers: sessionId -> timeoutId
+  const mountedRef = useRef(false);       // skip the first (empty) persistence write
 
   const [room, setRoom] = useState(null);
   const [items, setItems] = useState([]);
   const [containers, setContainers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState(null);
-  const [scanResult, setScanResult] = useState(null);
-  const [scanImage, setScanImage] = useState(null);
+  const [scans, setScans] = useState([]);          // Scan[] queue
+  const [scanError, setScanError] = useState(null); // upload-time error (couldn't even enqueue)
+  const [reviewingScanId, setReviewingScanId] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState(null);
   const [filterCategory, setFilterCategory] = useState(null);
 
+  // Derived queue buckets
+  const inFlight = scans.filter(s => s.status === 'pending' || s.status === 'processing');
+  const ready = scans.filter(s => s.status === 'completed');
+  const failed = scans.filter(s => s.status === 'failed');
+  const reviewingScan = scans.find(s => s.sessionId === reviewingScanId) || null;
+
+  // ---- per-session polling (recursive setTimeout so timers never overlap) ----
+  const clearTimer = useCallback((sessionId) => {
+    const t = timersRef.current.get(sessionId);
+    if (t) clearTimeout(t);
+    timersRef.current.delete(sessionId);
+  }, []);
+
+  const startPolling = useCallback((sessionId) => {
+    const poll = async () => {
+      try {
+        const data = await scan.getStatus(sessionId);
+        setScans(prev => prev.map(s => s.sessionId === sessionId ? {
+          ...s,
+          status: data.status,
+          // Keep the local blob preview if we have it; fall back to the
+          // backend-served image (re-attaches the thumbnail after a refresh).
+          imageUrl: s.imageUrl || data.image_url,
+          result: data.result,
+          error: data.error,
+        } : s));
+        if (data.status === 'completed' || data.status === 'failed') {
+          clearTimer(sessionId); // terminal — stop polling this scan
+        } else {
+          timersRef.current.set(sessionId, setTimeout(poll, POLL_INTERVAL_MS));
+        }
+      } catch (err) {
+        setScans(prev => prev.map(s => s.sessionId === sessionId
+          ? { ...s, status: 'failed', error: err.message }
+          : s));
+        clearTimer(sessionId);
+      }
+    };
+    poll();
+  }, [clearTimer]);
+
+  // Remove a scan from the queue (after review/discard/dismiss) and revoke its
+  // local blob preview if it had one.
+  const removeScan = useCallback((sessionId) => {
+    setScans(prev => {
+      const s = prev.find(x => x.sessionId === sessionId);
+      if (s?.imageUrl?.startsWith('blob:')) URL.revokeObjectURL(s.imageUrl);
+      return prev.filter(x => x.sessionId !== sessionId);
+    });
+    clearTimer(sessionId);
+  }, [clearTimer]);
+
+  // ---- mount / room switch: load room data + re-attach persisted scans ----
   useEffect(() => {
+    setLoading(true);
     loadData();
+    const stored = readActiveScans(roomId);
+    if (stored.length) {
+      setScans(stored.map(id => ({
+        sessionId: id, status: 'pending', imageUrl: null,
+        result: null, error: null, startedAt: Date.now(),
+      })));
+      stored.forEach(id => startPolling(id));
+    } else {
+      setScans([]);
+    }
+    return () => {
+      // Clear every poll timer on unmount / room switch so they don't leak.
+      timersRef.current.forEach(t => clearTimeout(t));
+      timersRef.current.clear();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
+
+  // Persist the active scan ids whenever the queue changes (so a refresh or
+  // navigation re-attaches). Skipped on the very first run to avoid wiping
+  // stored ids before the re-attach effect above has committed them.
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    writeActiveScans(roomId, scans.map(s => s.sessionId));
+  }, [scans, roomId]);
 
   const loadData = async () => {
     try {
@@ -42,19 +152,27 @@ export default function RoomView() {
     }
   };
 
+  // Take a photo and enqueue a scan. The button is never disabled, so you can
+  // fire off several photos in a row — each becomes its own background scan.
   const handleScan = async (file) => {
-    setScanning(true);
     setScanError(null);
     try {
-      // Compress image before upload
       const compressed = await compressImage(file, { maxWidth: 1280, quality: 0.7 });
-      const scanResult = await scan.upload(roomId, compressed);
-      setScanResult(scanResult);
-      setScanImage(URL.createObjectURL(compressed));
+      const previewUrl = URL.createObjectURL(compressed);
+      // Upload returns immediately with a session id; inference runs on the
+      // backend. This is what keeps long Ollama runs from ever blocking the UI.
+      const { scan_session_id } = await scan.upload(roomId, compressed);
+      setScans(prev => [...prev, {
+        sessionId: scan_session_id,
+        status: 'pending',
+        imageUrl: previewUrl,
+        result: null,
+        error: null,
+        startedAt: Date.now(),
+      }]);
+      startPolling(scan_session_id);
     } catch (err) {
       setScanError(err.message);
-    } finally {
-      setScanning(false);
     }
   };
 
@@ -63,15 +181,16 @@ export default function RoomView() {
     if (file) {
       await handleScan(file);
     }
-    // Reset input
+    // Reset so the same file (or camera) can be picked again for the next photo.
     e.target.value = null;
   };
 
+  // ---- review overlay (operates on the selected scan, not a single global result) ----
   const handleAcceptAll = async () => {
-    if (!scanResult) return;
-
+    if (!reviewingScan?.result) return;
+    const result = reviewingScan.result;
     try {
-      const itemsToCreate = scanResult.items.map(item => ({
+      const itemsToCreate = result.items.map(item => ({
         room_id: parseInt(roomId),
         name: item.name,
         category: item.category,
@@ -83,7 +202,7 @@ export default function RoomView() {
 
       // Create containers first
       const createdContainers = [];
-      for (const container of scanResult.proposed_containers) {
+      for (const container of result.proposed_containers) {
         const c = await containersApi.create({
           room_id: parseInt(roomId),
           name: container.name,
@@ -94,11 +213,8 @@ export default function RoomView() {
 
       // Map suggested containers to IDs
       const containerMap = {};
-      createdContainers.forEach(c => {
-        containerMap[c.name.toLowerCase()] = c.id;
-      });
+      createdContainers.forEach(c => { containerMap[c.name.toLowerCase()] = c.id; });
 
-      // Create items with container assignments
       const itemsToCreateWithContainers = itemsToCreate.map(item => ({
         ...item,
         container_id: item.suggested_container
@@ -107,34 +223,32 @@ export default function RoomView() {
       }));
 
       await itemsApi.bulkCreate({ items: itemsToCreateWithContainers });
-
-      // Refresh data
       await loadData();
-      setScanResult(null);
-      setScanImage(null);
+      const id = reviewingScanId;
+      setReviewingScanId(null);
+      removeScan(id);
     } catch (err) {
       console.error('Failed to accept scan results:', err);
     }
   };
 
   const handleRejectItem = (index) => {
-    if (!scanResult) return;
-    const updated = {
-      ...scanResult,
-      items: scanResult.items.filter((_, i) => i !== index),
-    };
-    setScanResult(updated);
+    if (!reviewingScan?.result) return;
+    setScans(prev => prev.map(s => s.sessionId === reviewingScanId ? {
+      ...s,
+      result: { ...s.result, items: s.result.items.filter((_, i) => i !== index) },
+    } : s));
   };
 
   const handleEditItem = (index, field, value) => {
-    if (!scanResult) return;
-    const updated = {
-      ...scanResult,
-      items: scanResult.items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      ),
-    };
-    setScanResult(updated);
+    if (!reviewingScan?.result) return;
+    setScans(prev => prev.map(s => s.sessionId === reviewingScanId ? {
+      ...s,
+      result: {
+        ...s.result,
+        items: s.result.items.map((it, i) => i === index ? { ...it, [field]: value } : it),
+      },
+    } : s));
   };
 
   const filteredItems = selectedContainer
@@ -191,22 +305,17 @@ export default function RoomView() {
         </div>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="btn-primary self-start sm:self-auto"
-          disabled={scanning}
+          className="btn-primary self-start sm:self-auto relative"
         >
-          {scanning ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-surface-950/40 border-t-surface-950"></div>
-              Scanning…
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Scan area
-            </>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          Scan area
+          {inFlight.length > 0 && (
+            <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-surface-950/40 text-[0.65rem] font-mono font-bold text-primary-300">
+              {inFlight.length}
+            </span>
           )}
         </button>
       </div>
@@ -220,28 +329,74 @@ export default function RoomView() {
         className="hidden"
       />
 
-      {/* Signature: hazard scanner running */}
-      {scanning && (
-        <div className="rounded-lg overflow-hidden border border-primary-500/40">
-          <div className="scan-stripes h-2.5" />
-          <div className="bg-surface-900 px-4 py-3.5 flex items-center gap-3">
-            <div className="animate-spin rounded-full h-5 w-5 border-2 border-surface-700 border-t-primary-500 flex-shrink-0"></div>
-            <div>
-              <p className="font-display font-semibold text-surface-100">Reading the photo…</p>
-              <p className="eyebrow mt-0.5">AI is identifying and tagging items</p>
+      {/* Scan queue — multiple photos can be processing at once; each is
+          independent and reviewable on its own. */}
+      {scans.length > 0 && (
+        <div className="space-y-3">
+          {/* In-flight scans */}
+          {inFlight.length > 0 && (
+            <div className="rounded-lg overflow-hidden border border-primary-500/40">
+              <div className="scan-stripes h-2.5" />
+              <div className="bg-surface-900 divide-y divide-surface-800">
+                {inFlight.map(s => (
+                  <div key={s.sessionId} className="px-4 py-3 flex items-center gap-3">
+                    <Thumb url={s.imageUrl} />
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-surface-700 border-t-primary-500 flex-shrink-0"></div>
+                    <div className="min-w-0">
+                      <p className="font-display font-semibold text-surface-100">Reading the photo…</p>
+                      <p className="eyebrow mt-0.5">AI is identifying and tagging items</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Ready to review */}
+          {ready.length > 0 && (
+            <div className="space-y-2">
+              <p className="eyebrow">Ready to review · {ready.length}</p>
+              {ready.map(s => (
+                <div key={s.sessionId} className="card flex items-center gap-3 py-3">
+                  <Thumb url={s.imageUrl} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-surface-100 font-medium">
+                      {s.result?.items.length || 0} {s.result?.items.length === 1 ? 'item' : 'items'} found
+                    </p>
+                    <p className="text-xs text-surface-500">
+                      {s.result?.proposed_containers.length || 0} {s.result?.proposed_containers.length === 1 ? 'container' : 'containers'}
+                    </p>
+                  </div>
+                  <button onClick={() => setReviewingScanId(s.sessionId)} className="btn-primary">Review</button>
+                  <button onClick={() => removeScan(s.sessionId)} className="btn-secondary">Discard</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Failed scans */}
+          {failed.length > 0 && (
+            <div className="space-y-2">
+              {failed.map(s => (
+                <div key={s.sessionId} className="card border-red-900 bg-red-950/30 flex items-center gap-3 py-3">
+                  <Thumb url={s.imageUrl} />
+                  <p className="text-red-400 text-sm flex-1">Couldn't scan that photo. {s.error}</p>
+                  <button onClick={() => removeScan(s.sessionId)} className="btn-secondary">Dismiss</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {scanError && !scanResult && (
+      {scanError && (
         <div className="card border-red-900 bg-red-950/30">
-          <p className="text-red-400 text-sm">Couldn't scan that photo. {scanError}</p>
+          <p className="text-red-400 text-sm">Couldn't start that scan. {scanError}</p>
         </div>
       )}
 
-      {/* Scan result overlay */}
-      {scanResult && (
+      {/* Scan result overlay — bound to the selected scan, not a single global result */}
+      {reviewingScan && (
         <div className="fixed inset-0 bg-surface-950/95 backdrop-blur-sm z-50 overflow-y-auto safe-top safe-bottom">
           <div className="hazard h-1 w-full sticky top-0" />
           <div className="max-w-2xl mx-auto px-4 py-6">
@@ -251,9 +406,9 @@ export default function RoomView() {
                 <h3 className="font-display text-2xl font-bold text-surface-100">Confirm the catalogue</h3>
               </div>
               <button
-                onClick={() => { setScanResult(null); setScanImage(null); }}
+                onClick={() => setReviewingScanId(null)}
                 className="p-2 -mr-2 text-surface-500 hover:text-surface-200 transition-colors"
-                aria-label="Cancel review"
+                aria-label="Close review"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -262,21 +417,21 @@ export default function RoomView() {
             </div>
 
             {/* Source image */}
-            {scanImage && (
+            {reviewingScan.imageUrl && (
               <div className="mb-6">
                 <p className="eyebrow mb-2">Source</p>
                 <div className="rounded-lg overflow-hidden border border-surface-800">
-                  <img src={scanImage} alt="Scanned area" className="w-full h-auto" />
+                  <img src={reviewingScan.imageUrl} alt="Scanned area" className="w-full h-auto" />
                 </div>
               </div>
             )}
 
             {/* Proposed containers */}
-            {scanResult.proposed_containers.length > 0 && (
+            {reviewingScan.result?.proposed_containers.length > 0 && (
               <div className="mb-6">
-                <p className="eyebrow mb-2">Proposed containers · {scanResult.proposed_containers.length}</p>
+                <p className="eyebrow mb-2">Proposed containers · {reviewingScan.result.proposed_containers.length}</p>
                 <div className="space-y-2">
-                  {scanResult.proposed_containers.map((container, i) => (
+                  {reviewingScan.result.proposed_containers.map((container, i) => (
                     <div key={i} className="card flex items-center gap-3 py-3">
                       <svg className="w-5 h-5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -295,9 +450,9 @@ export default function RoomView() {
 
             {/* Items to review */}
             <div className="mb-6">
-              <p className="eyebrow mb-2">Discovered items · {scanResult.items.length}</p>
+              <p className="eyebrow mb-2">Discovered items · {reviewingScan.result?.items.length || 0}</p>
               <div className="space-y-2">
-                {scanResult.items.map((item, i) => (
+                {reviewingScan.result?.items.map((item, i) => (
                   <div key={i} className="card py-3">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[0.62rem] text-surface-600 w-7 flex-shrink-0">
@@ -333,16 +488,10 @@ export default function RoomView() {
               </div>
             </div>
 
-            {scanError && (
-              <div className="card border-red-900 bg-red-950/30 mb-4">
-                <p className="text-red-400 text-sm">{scanError}</p>
-              </div>
-            )}
-
             {/* Actions */}
             <div className="flex gap-3 sticky bottom-0 bg-surface-950/95 backdrop-blur-sm pt-4 pb-6 safe-bottom">
               <button
-                onClick={() => { setScanResult(null); setScanImage(null); }}
+                onClick={() => { removeScan(reviewingScanId); setReviewingScanId(null); }}
                 className="btn-secondary flex-1"
               >
                 Discard
@@ -350,9 +499,9 @@ export default function RoomView() {
               <button
                 onClick={handleAcceptAll}
                 className="btn-primary flex-1"
-                disabled={scanResult.items.length === 0}
+                disabled={(reviewingScan.result?.items.length || 0) === 0}
               >
-                File {scanResult.items.length} {scanResult.items.length === 1 ? 'item' : 'items'}
+                File {reviewingScan.result?.items.length || 0} {(reviewingScan.result?.items.length || 0) === 1 ? 'item' : 'items'}
               </button>
             </div>
           </div>
@@ -417,7 +566,7 @@ export default function RoomView() {
             {items.length === 0 ? 'Point your camera at a shelf and let the AI do the filing.' : 'Try a different container or category.'}
           </p>
           {items.length === 0 && (
-            <button onClick={() => fileInputRef.current?.click()} className="btn-primary mx-auto" disabled={scanning}>
+            <button onClick={() => fileInputRef.current?.click()} className="btn-primary mx-auto">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />

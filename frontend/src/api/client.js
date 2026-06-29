@@ -69,6 +69,9 @@ export const items = {
 };
 
 // Scan
+// The upload is asynchronous: it returns { scan_session_id, status } almost
+// instantly (the AI inference runs in a backend background task). Poll
+// getStatus(sessionId) until status === 'completed' (or 'failed').
 export const scan = {
   upload: async (roomId, file) => {
     const formData = new FormData();
@@ -85,7 +88,9 @@ export const scan = {
       throw new Error(error.detail || `Scan failed: ${response.status}`);
     }
 
+    // Returns { scan_session_id, status: "pending" } immediately.
     return response.json();
   },
+  getStatus: (sessionId) => request(`/scan/${sessionId}`),
   getPending: (sessionId) => request(`/scan/pending/${sessionId}`),
 };

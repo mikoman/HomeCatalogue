@@ -21,6 +21,21 @@ class ScanResult(BaseModel):
     items: list[AIItem] = []
 
 
+class ScanUploadResponse(BaseModel):
+    """Returned immediately by POST /scan/upload. Inference runs async."""
+    scan_session_id: str
+    status: str = "pending"
+
+
+class ScanStatusResponse(BaseModel):
+    """Polled by the frontend via GET /scan/{id} until status is terminal."""
+    scan_session_id: str
+    status: str  # pending | processing | completed | failed
+    image_url: str | None = None
+    result: ScanResult | None = None
+    error: str | None = None
+
+
 class ScanRequest(BaseModel):
     """Expected structured output from the AI vision model."""
     proposed_containers: list[AIContainer] = []

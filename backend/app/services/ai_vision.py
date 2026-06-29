@@ -168,7 +168,15 @@ async def _process_ollama(image_path: str) -> ScanResult:
 
     # Pass the JSON schema as `format` (Ollama structured outputs) so the model
     # returns the exact shape _parse_scan_result expects, not just any valid JSON.
-    async with httpx.AsyncClient(timeout=300.0) as client:  # ponytail: 300s covers cold model load + slow 8B vision; raise if a bigger model needs it
+    #
+    # Timeout must cover not just one inference, but time spent queued behind
+    # other scans: Ollama processes requests serially by default, so when the
+    # UI fires several scans at once (multi-scan queue), a request may wait
+    # N*(per-scan time) before Ollama starts it — and that wait counts against
+    # this timeout. 600s comfortably covers a ~4-5 deep queue of slow 8B vision
+    # scans plus this scan's own inference. Raise OLLAMA_NUM_PARALLEL to run
+    # inference concurrently (VRAM permitting) if you need deeper queues.
+    async with httpx.AsyncClient(timeout=600.0) as client:
         response = await client.post(
             f"{base_url}/api/chat",
             json={
@@ -203,7 +211,9 @@ async def _process_omlx(image_path: str) -> ScanResult:
     base_url = settings.omlx_base_url.rstrip("/")
     headers = {"Authorization": f"Bearer {settings.omlx_api_key}"} if settings.omlx_api_key else {}
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    # See _process_ollama for the queue-depth rationale. Local OpenAI-compatible
+    # servers typically also serialize, so the same multi-scan queueing applies.
+    async with httpx.AsyncClient(timeout=600.0) as client:
         response = await client.post(
             f"{base_url}/chat/completions",
             headers=headers,
