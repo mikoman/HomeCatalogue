@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { rooms as roomsApi, items as itemsApi, containers as containersApi, scan } from '../api/client';
 import { compressImage } from '../utils/imageCompression';
 import ItemCard from './ItemCard';
@@ -101,7 +101,10 @@ export default function RoomView() {
 
   // Remove a scan from the queue (after review/discard/dismiss) and revoke its
   // local blob preview if it had one.
-  const removeScan = useCallback((sessionId) => {
+  const removeScan = useCallback((sessionId, { dismissFailed = false } = {}) => {
+    if (dismissFailed) {
+      scan.dismiss(sessionId).catch(() => {});
+    }
     setScans(prev => {
       const s = prev.find(x => x.sessionId === sessionId);
       if (s?.imageUrl?.startsWith('blob:')) URL.revokeObjectURL(s.imageUrl);
@@ -535,7 +538,10 @@ export default function RoomView() {
                 <div key={s.sessionId} className="card border-red-900 bg-red-950/30 flex flex-wrap items-center gap-3 py-3">
                   <Thumb url={s.imageUrl} />
                   <p className="text-red-400 text-sm flex-1 min-w-0">Couldn't scan that photo. {s.error}</p>
-                  <button onClick={() => removeScan(s.sessionId)} className="btn-secondary w-full sm:w-auto">Dismiss</button>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <Link to="/failed-scans" className="btn-primary flex-1 sm:flex-none text-sm">Retry</Link>
+                    <button onClick={() => removeScan(s.sessionId, { dismissFailed: true })} className="btn-secondary flex-1 sm:flex-none">Dismiss</button>
+                  </div>
                 </div>
               ))}
             </div>

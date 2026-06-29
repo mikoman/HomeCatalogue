@@ -17,6 +17,7 @@ class ScanSession(Base):
 
     id = Column(String(100), primary_key=True)  # UUID scan_session_id
     room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False, index=True)
+    container_id = Column(Integer, ForeignKey("containers.id"), nullable=True, index=True)
     image_path = Column(String(1000), nullable=True)
 
     # pending -> processing -> completed | failed

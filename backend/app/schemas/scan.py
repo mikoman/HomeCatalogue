@@ -1,5 +1,6 @@
 """Pydantic schemas for scan/scan-result requests and responses."""
 
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -40,3 +41,21 @@ class ScanRequest(BaseModel):
     """Expected structured output from the AI vision model."""
     proposed_containers: list[AIContainer] = []
     items: list[AIItem] = []
+
+
+class FailedScanRead(BaseModel):
+    """A scan session that failed AI analysis — retained for review and retry."""
+    scan_session_id: str
+    room_id: int
+    room_name: str
+    house_id: int
+    house_name: str
+    container_id: int | None
+    container_name: str | None
+    status: str
+    image_url: str | None
+    error: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}

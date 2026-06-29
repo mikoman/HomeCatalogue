@@ -21,8 +21,9 @@ from app.database import SessionLocal, get_db
 from app.models.container import Container
 from app.models.item import Item
 from app.models.room import Room
+from app.models.house import House
 from app.models.scan_session import ScanSession
-from app.schemas.scan import ScanResult, ScanUploadResponse, ScanStatusResponse
+from app.schemas.scan import ScanResult, ScanUploadResponse, ScanStatusResponse, FailedScanRead
 from app.services.ai_vision import process_image_with_ai
 from app.storage import save_upload, get_storage_url
 
@@ -64,6 +65,7 @@ async def upload_and_scan(
     session = ScanSession(
         id=scan_session_id,
         room_id=room_id,
+        container_id=container_id,
         image_path=file_path,
         status="pending",
     )
@@ -122,6 +124,9 @@ def _set_status(
     result: dict | None = None,
     error: str | None = None,
     completed_at: datetime | None = None,
+    *,
+    clear_result: bool = False,
+    clear_error: bool = False,
 ) -> None:
     """Update a scan session row using a short-lived DB session."""
     db = SessionLocal()
@@ -130,9 +135,13 @@ def _set_status(
         if not sess:
             return
         sess.status = status
-        if result is not None:
+        if clear_result:
+            sess.result = None
+        elif result is not None:
             sess.result = result
-        if error is not None:
+        if clear_error:
+            sess.error = None
+        elif error is not None:
             sess.error = error
         if completed_at is not None:
             sess.completed_at = completed_at
@@ -177,6 +186,88 @@ def _fetch_existing_containers(room_id: int) -> list[dict]:
         return [{"name": c.name, "description": c.description or ""} for c in rows]
     finally:
         db.close()
+
+
+@router.get("/failed", response_model=list[FailedScanRead])
+def list_failed_scans(db: Session = Depends(get_db)):
+    """List scan sessions that failed AI analysis, newest first."""
+    rows = (
+        db.query(ScanSession, Room, House, Container)
+        .join(Room, ScanSession.room_id == Room.id)
+        .join(House, Room.house_id == House.id)
+        .outerjoin(Container, ScanSession.container_id == Container.id)
+        .filter(ScanSession.status == "failed")
+        .order_by(ScanSession.completed_at.desc().nullslast(), ScanSession.created_at.desc())
+        .all()
+    )
+    return [
+        FailedScanRead(
+            scan_session_id=sess.id,
+            room_id=room.id,
+            room_name=room.name,
+            house_id=house.id,
+            house_name=house.name,
+            container_id=container.id if container else None,
+            container_name=container.name if container else None,
+            status=sess.status,
+            image_url=get_storage_url(os.path.basename(sess.image_path)) if sess.image_path else None,
+            error=sess.error,
+            created_at=sess.created_at,
+            completed_at=sess.completed_at,
+        )
+        for sess, room, house, container in rows
+    ]
+
+
+@router.post("/{scan_session_id}/retry", response_model=ScanStatusResponse)
+async def retry_scan(
+    scan_session_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Re-run AI analysis on a failed scan using the retained image."""
+    sess = db.query(ScanSession).filter(ScanSession.id == scan_session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    if sess.status not in ("failed", "completed"):
+        raise HTTPException(status_code=400, detail="Only failed or completed scans can be retried")
+    if not sess.image_path or not os.path.isfile(sess.image_path):
+        raise HTTPException(status_code=400, detail="Original image no longer available")
+
+    sess.status = "pending"
+    sess.error = None
+    sess.result = None
+    sess.completed_at = None
+    db.commit()
+
+    background_tasks.add_task(
+        _run_scan,
+        scan_session_id,
+        sess.image_path,
+        sess.room_id,
+        sess.container_id,
+    )
+
+    image_url = get_storage_url(os.path.basename(sess.image_path))
+    return ScanStatusResponse(
+        scan_session_id=sess.id,
+        status="pending",
+        image_url=image_url,
+        result=None,
+        error=None,
+    )
+
+
+@router.delete("/{scan_session_id}", status_code=204)
+def dismiss_failed_scan(scan_session_id: str, db: Session = Depends(get_db)):
+    """Remove a failed scan from the failed-analysis list (image file is kept on disk)."""
+    sess = db.query(ScanSession).filter(ScanSession.id == scan_session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Scan session not found")
+    if sess.status != "failed":
+        raise HTTPException(status_code=400, detail="Only failed scans can be dismissed here")
+    db.delete(sess)
+    db.commit()
 
 
 @router.get("/pending/{scan_session_id}")

@@ -1,6 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
-import { useState } from 'react';
-import { houses as housesApi, rooms as roomsApi } from '../api/client';
+import { useState, useEffect } from 'react';
+import { houses as housesApi, rooms as roomsApi, scan } from '../api/client';
 
 function SettingsLink({ onClose, className = '' }) {
   return (
@@ -22,6 +22,30 @@ function SettingsLink({ onClose, className = '' }) {
   );
 }
 
+function FailedScansLink({ onClose, className = '', count = 0 }) {
+  return (
+    <NavLink
+      to="/failed-scans"
+      onClick={() => onClose?.()}
+      className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${className} ${
+        isActive
+          ? 'bg-surface-800 text-primary-400'
+          : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
+      }`}
+    >
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+      <span className="flex-1">Failed analysis</span>
+      {count > 0 && (
+        <span className="min-w-5 h-5 px-1.5 rounded-full bg-red-950 text-red-400 border border-red-900 text-[0.65rem] font-mono font-bold grid place-items-center">
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </NavLink>
+  );
+}
+
 export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
   const [expandedHouses, setExpandedHouses] = useState({});
   const [rooms, setRooms] = useState({});
@@ -29,6 +53,22 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
   const [newHouseName, setNewHouseName] = useState('');
   const [showAddRoom, setShowAddRoom] = useState(null);
   const [newRoomName, setNewRoomName] = useState('');
+  const [failedCount, setFailedCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadFailedCount = () => {
+      scan.listFailed()
+        .then((data) => { if (!cancelled) setFailedCount(data.length); })
+        .catch(() => { if (!cancelled) setFailedCount(0); });
+    };
+    loadFailedCount();
+    const interval = setInterval(loadFailedCount, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   const toggleHouse = async (houseId) => {
     const isExpanded = expandedHouses[houseId];
@@ -124,7 +164,8 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
         </div>
 
         {/* Settings — top of sidebar on mobile so it stays reachable */}
-        <div className="flex-shrink-0 px-3 pt-2 pb-3 border-b border-surface-800 lg:hidden">
+        <div className="flex-shrink-0 px-3 pt-2 pb-3 border-b border-surface-800 lg:hidden space-y-1">
+          <FailedScansLink onClose={onClose} count={failedCount} />
           <SettingsLink onClose={onClose} />
         </div>
 
@@ -250,7 +291,8 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
 
         {/* Footer — always visible on desktop */}
         <div className="flex-shrink-0 px-3 py-3 border-t border-surface-800 bg-surface-900 space-y-1">
-          <div className="hidden lg:block">
+          <div className="hidden lg:block space-y-1">
+            <FailedScansLink onClose={onClose} count={failedCount} />
             <SettingsLink onClose={onClose} />
           </div>
           <p className="font-mono text-[0.62rem] text-surface-600 tracking-wider px-3 pt-1">

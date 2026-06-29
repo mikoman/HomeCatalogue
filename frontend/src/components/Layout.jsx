@@ -14,6 +14,7 @@ export default function Layout({ children, houses, setHouses }) {
     location.pathname === '/review-scan' ? 'REVIEW' :
     location.pathname === '/settings' ? 'SETTINGS' :
     location.pathname === '/search' ? 'SEARCH' :
+    location.pathname === '/failed-scans' ? 'FAILED' :
     'CATALOGUE';
 
   return (

@@ -106,6 +106,9 @@ export const scan = {
   },
   getStatus: (sessionId) => request(`/scan/${sessionId}`),
   getPending: (sessionId) => request(`/scan/pending/${sessionId}`),
+  listFailed: () => request('/scan/failed'),
+  retry: (sessionId) => request(`/scan/${sessionId}/retry`, { method: 'POST' }),
+  dismiss: (sessionId) => request(`/scan/${sessionId}`, { method: 'DELETE' }),
 };
 
 // AI settings

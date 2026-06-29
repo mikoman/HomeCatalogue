@@ -19,9 +19,21 @@ from app.runtime_env import running_in_docker
 async def lifespan(app: FastAPI):
     """Create tables on startup if they don't exist."""
     Base.metadata.create_all(bind=engine)
+    _migrate_scan_sessions()
     # Ensure upload directory exists
     os.makedirs(settings.upload_dir, exist_ok=True)
     yield
+
+
+def _migrate_scan_sessions() -> None:
+    """Add columns introduced after initial deploy (SQLite has no ALTER IF NOT EXISTS)."""
+    with engine.begin() as conn:
+        rows = conn.execute(text("PRAGMA table_info(scan_sessions)")).fetchall()
+        col_names = {row[1] for row in rows}
+        if rows and "container_id" not in col_names:
+            conn.execute(
+                text("ALTER TABLE scan_sessions ADD COLUMN container_id INTEGER REFERENCES containers(id)")
+            )
 
 
 app = FastAPI(

@@ -8,6 +8,7 @@ import RoomView from './components/RoomView';
 import ReviewScan from './components/ReviewScan';
 import Settings from './components/Settings';
 import SearchResults from './components/SearchResults';
+import FailedScans from './components/FailedScans';
 
 export default function App() {
   const [housesList, setHousesList] = useState([]);
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/review-scan" element={<ReviewScan />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/search" element={<SearchResults />} />
+        <Route path="/failed-scans" element={<FailedScans />} />
       </Routes>
     </Layout>
   );
