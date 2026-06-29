@@ -54,7 +54,8 @@ export const containers = {
   get: (id) => request(`/containers/${id}`),
   create: (data) => request('/containers/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/containers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (id) => request(`/containers/${id}`, { method: 'DELETE' }),
+  delete: (id, { deleteItems = false } = {}) =>
+    request(`/containers/${id}?delete_items=${deleteItems}`, { method: 'DELETE' }),
   move: (id, { roomId }) =>
     request(`/containers/${id}/move`, { method: 'POST', body: JSON.stringify({ room_id: roomId }) }),
 };

@@ -5,6 +5,7 @@ import { compressImage } from '../utils/imageCompression';
 import ItemCard from './ItemCard';
 import ContainerTree from './ContainerTree';
 import MovePicker from './MovePicker';
+import { groupItemsByName } from '../utils/groupItems';
 
 // Persist the active (in-flight / ready / failed) scans per room so the queue
 // re-attaches after navigating away and back or a page refresh. The backend
@@ -189,21 +190,25 @@ export default function RoomView() {
   };
 
   // ---- multi-select item moves ----
-  const toggleSelectItem = (id) => {
-    setSelectedItemIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
   const handleMoveSelectedItems = () => {
     if (selectedItemIds.size === 0) return;
     setMovingItems([...selectedItemIds]);
   };
 
-  const handleMoveSingleItem = (id) => {
-    setMovingItems([id]);
+  const handleMoveSingleItem = (ids) => {
+    setMovingItems(Array.isArray(ids) ? ids : [ids]);
+  };
+
+  const toggleSelectGroup = (groupItems) => {
+    setSelectedItemIds(prev => {
+      const next = new Set(prev);
+      const allSelected = groupItems.every(i => next.has(i.id));
+      for (const i of groupItems) {
+        if (allSelected) next.delete(i.id);
+        else next.add(i.id);
+      }
+      return next;
+    });
   };
 
   // ---- review overlay (operates on the selected scan, not a single global result) ----
@@ -705,15 +710,19 @@ export default function RoomView() {
       ) : (
         <>
           <div className="grid gap-3 min-w-0 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredItems.map(item => (
+            {groupItemsByName(filteredItems).map(group => (
               <ItemCard
-                key={item.id}
-                item={item}
-                selected={selectedItemIds.has(item.id)}
-                onToggleSelect={toggleSelectItem}
+                key={group.name}
+                item={group.items[0]}
+                items={group.items}
+                count={group.count}
+                selected={group.items.every(i => selectedItemIds.has(i.id))}
+                onToggleSelect={() => toggleSelectGroup(group.items)}
                 onMove={handleMoveSingleItem}
-                onUpdate={(updates) => itemsApi.update(item.id, updates).then(loadData)}
-                onDelete={() => itemsApi.delete(item.id).then(loadData)}
+                onUpdate={(updates) =>
+                  Promise.all(group.items.map(i => itemsApi.update(i.id, updates))).then(loadData)
+                }
+                onDelete={() => itemsApi.delete(group.items[0].id).then(loadData)}
               />
             ))}
           </div>

@@ -1,11 +1,22 @@
 import { useState } from 'react';
 
-export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, onToggleSelect }) {
+export default function ItemCard({
+  item,
+  items,
+  count = 1,
+  onUpdate,
+  onDelete,
+  onMove,
+  selected,
+  onToggleSelect,
+}) {
+  const groupItems = items ?? [item];
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(item.name);
   const [editCategory, setEditCategory] = useState(item.category || '');
   const [showDelete, setShowDelete] = useState(false);
   const selectable = typeof onToggleSelect === 'function';
+  const isGrouped = count > 1;
 
   const handleSave = async () => {
     if (!editName.trim()) return;
@@ -17,7 +28,10 @@ export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, o
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Delete "${item.name}"?`)) return;
+    const label = isGrouped
+      ? `Remove 1 of ${count} "${item.name}"?`
+      : `Delete "${item.name}"?`;
+    if (!confirm(label)) return;
     await onDelete();
   };
 
@@ -32,6 +46,11 @@ export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, o
     return (
       <div className="card">
         <div className="space-y-3">
+          {isGrouped && (
+            <p className="text-xs text-surface-500">
+              Renaming all {count} items in this group.
+            </p>
+          )}
           <div>
             <label className="block font-mono text-[0.62rem] uppercase tracking-wider text-surface-500 mb-1">Name</label>
             <input
@@ -62,7 +81,7 @@ export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, o
   return (
     <div
       className={`card group hover:border-surface-600 transition-all min-w-0 overflow-hidden ${selected ? 'border-primary-500 ring-1 ring-primary-500/40' : ''}`}
-      onClick={selectable ? () => onToggleSelect(item.id) : undefined}
+      onClick={selectable ? () => onToggleSelect() : undefined}
     >
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex-1 min-w-0 flex items-start gap-2">
@@ -70,41 +89,48 @@ export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, o
             <input
               type="checkbox"
               checked={!!selected}
-              onChange={() => onToggleSelect(item.id)}
+              onChange={() => onToggleSelect()}
               onClick={(e) => e.stopPropagation()}
               className="mt-1 w-4 h-4 rounded border-surface-600 bg-surface-900 accent-primary-500 flex-shrink-0"
               aria-label={`Select ${item.name}`}
             />
           )}
           <div className="flex-1 min-w-0">
-            <span className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
-              #{String(item.id).padStart(4, '0')}
-            </span>
-          <h3 className="text-surface-100 font-medium truncate mt-0.5">{item.name}</h3>
-          <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            {item.category && <span className="tag">{item.category}</span>}
-            {getConfidenceBadge()}
-          </div>
-          {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2">
-              {item.tags.slice(0, 3).map(tag => (
-                <span key={tag} className="font-mono text-[0.7rem] text-surface-500">#{tag}</span>
-              ))}
-              {item.tags.length > 3 && (
-                <span className="font-mono text-[0.7rem] text-surface-600">+{item.tags.length - 3}</span>
+            {!isGrouped && (
+              <span className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
+                #{String(item.id).padStart(4, '0')}
+              </span>
+            )}
+            <h3 className="text-surface-100 font-medium truncate mt-0.5">
+              {item.name}
+              {isGrouped && (
+                <span className="text-surface-400 font-normal ml-1.5">×{count}</span>
               )}
+            </h3>
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {item.category && <span className="tag">{item.category}</span>}
+              {getConfidenceBadge()}
             </div>
-          )}
-          {item.date_added && (
-            <p className="font-mono text-[0.62rem] text-surface-600 mt-2.5">
-              {new Date(item.date_added).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })}
-            </p>
-          )}
+            {item.tags && item.tags.length > 0 && (
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2">
+                {item.tags.slice(0, 3).map(tag => (
+                  <span key={tag} className="font-mono text-[0.7rem] text-surface-500">#{tag}</span>
+                ))}
+                {item.tags.length > 3 && (
+                  <span className="font-mono text-[0.7rem] text-surface-600">+{item.tags.length - 3}</span>
+                )}
+              </div>
+            )}
+            {item.date_added && !isGrouped && (
+              <p className="font-mono text-[0.62rem] text-surface-600 mt-2.5">
+                {new Date(item.date_added).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={() => { setEditName(item.name); setEditCategory(item.category || ''); setIsEditing(true); }}
             className="p-1.5 text-surface-500 hover:text-primary-400 transition-colors"
             aria-label="Edit item"
           >
@@ -123,7 +149,7 @@ export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, o
           </button>
           {onMove && (
             <button
-              onClick={(e) => onMove(item.id, e)}
+              onClick={(e) => onMove(groupItems.map(i => i.id), e)}
               className="p-1.5 text-surface-500 hover:text-primary-400 transition-colors"
               aria-label={`Move ${item.name}`}
             >
@@ -135,10 +161,11 @@ export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, o
         </div>
       </div>
 
-      {/* Delete confirmation */}
       {showDelete && (
         <div className="mt-3 pt-3 border-t border-surface-800" onClick={(e) => e.stopPropagation()}>
-          <p className="text-sm text-surface-400 mb-2">Delete this item?</p>
+          <p className="text-sm text-surface-400 mb-2">
+            {isGrouped ? `Remove 1 of ${count}?` : 'Delete this item?'}
+          </p>
           <div className="flex gap-2">
             <button onClick={handleDelete} className="btn-danger text-xs px-3 py-1.5">Delete</button>
             <button onClick={() => setShowDelete(false)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import MovePicker from './MovePicker';
 
 export default function ContainerTree({ containers, selectedId, onSelect, onAddChild, roomId, onMoved }) {
@@ -6,9 +7,27 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
   const [addingTo, setAddingTo] = useState(null);
   const [newName, setNewName] = useState('');
   const [moveContainerId, setMoveContainerId] = useState(null);
+  const [deletingContainer, setDeletingContainer] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   const getChildren = (parentId) =>
     containers.filter(c => c.parent_id === parentId);
+
+  const handleDelete = async (containerId, deleteItems) => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const { containers: containersApi } = await import('../api/client');
+      await containersApi.delete(containerId, { deleteItems });
+      setDeletingContainer(null);
+      onMoved?.();
+    } catch (err) {
+      setDeleteError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleAddChild = async (parentId) => {
     if (!newName.trim()) return;
@@ -64,6 +83,15 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m0 0l-3-3m3 3l-3 3" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeletingContainer(container); }}
+            className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 p-1 text-surface-500 hover:text-red-400 transition-all flex-shrink-0"
+            aria-label={`Delete ${container.name}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
         </div>
@@ -123,6 +151,65 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
           onDone={() => { onMoved?.(); setMoveContainerId(null); }}
           onClose={() => setMoveContainerId(null)}
         />
+      )}
+      {deletingContainer != null && createPortal(
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => !deleting && setDeletingContainer(null)}
+        >
+          <div
+            className="card w-full max-w-md animate-rise mx-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="eyebrow mb-1">Delete container</p>
+            <h3 className="font-display text-xl font-semibold text-surface-100 mb-2">
+              Delete “{deletingContainer.name}”?
+            </h3>
+            <p className="text-sm text-surface-400 mb-4">
+              This removes the container and any sub-containers inside it. Choose what happens to the items filed there.
+            </p>
+
+            {deleteError && (
+              <div className="card border-red-900 bg-red-950/30 mb-4 py-2.5 px-3">
+                <p className="text-red-400 text-sm">{deleteError}</p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handleDelete(deletingContainer.id, false)}
+                disabled={deleting}
+                className="btn-secondary w-full text-left"
+              >
+                Delete container only
+                <span className="block text-xs font-normal text-surface-500 mt-0.5">
+                  Items stay in this room, filed loose.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(deletingContainer.id, true)}
+                disabled={deleting}
+                className="w-full px-4 py-2.5 rounded-md bg-red-950/50 text-red-400 border border-red-900 hover:bg-red-950 transition-colors text-left disabled:opacity-50"
+              >
+                Delete container &amp; items
+                <span className="block text-xs font-normal text-red-400/70 mt-0.5">
+                  Permanently remove all items inside.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingContainer(null)}
+                disabled={deleting}
+                className="btn-secondary w-full mt-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

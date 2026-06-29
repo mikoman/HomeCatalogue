@@ -130,10 +130,54 @@ def update_container(container_id: int, data: ContainerUpdate, db: Session = Dep
     return container
 
 
+def _gather_subtree_levels(db: Session, container_id: int) -> tuple[set[int], list[list[int]]]:
+    """Return (all ids in subtree, ids grouped by depth for leaf-first deletion)."""
+    levels: list[list[int]] = [[container_id]]
+    subtree_ids = {container_id}
+    frontier = [container_id]
+    while frontier:
+        children = (
+            db.query(Container)
+            .filter(Container.parent_id.in_(frontier))
+            .all()
+        )
+        child_ids = [c.id for c in children]
+        if not child_ids:
+            break
+        levels.append(child_ids)
+        subtree_ids.update(child_ids)
+        frontier = child_ids
+    return subtree_ids, levels
+
+
 @router.delete("/{container_id}", status_code=204)
-def delete_container(container_id: int, db: Session = Depends(get_db)):
+def delete_container(
+    container_id: int,
+    delete_items: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Delete a container and its whole subtree.
+
+    When delete_items is False (default), items inside any container in the
+    subtree are unfiled (container_id set to NULL) and stay in the room.
+    When True, those items are deleted along with the containers.
+    """
     container = db.query(Container).filter(Container.id == container_id).first()
     if not container:
         raise HTTPException(status_code=404, detail="Container not found")
-    db.delete(container)
+
+    subtree_ids, levels = _gather_subtree_levels(db, container_id)
+
+    items_query = db.query(Item).filter(Item.container_id.in_(subtree_ids))
+    if delete_items:
+        items_query.delete(synchronize_session=False)
+    else:
+        items_query.update({Item.container_id: None}, synchronize_session=False)
+
+    # Bulk-delete containers deepest-first so parent_id FKs stay valid.
+    for level in reversed(levels):
+        db.query(Container).filter(Container.id.in_(level)).delete(
+            synchronize_session=False
+        )
+
     db.commit()
