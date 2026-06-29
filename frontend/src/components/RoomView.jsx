@@ -230,10 +230,18 @@ export default function RoomView() {
     const result = reviewingScan.result;
     const existingContainers = reviewingScan.existingContainers || [];
     const itemTargets = reviewingScan.itemTargets || [];
+    const containerFlags = reviewingScan.containerFlags || [];
     try {
       // 1. Build nameToId from existing containers (case-insensitive).
       const nameToId = {};
       existingContainers.forEach(c => { nameToId[c.name.toLowerCase()] = c.id; });
+
+      const resolveParentId = (target) => {
+        if (!target || target.kind === 'loose') return null;
+        if (target.kind === 'existing') return target.containerId;
+        if (target.kind === 'proposed') return nameToId[target.name.toLowerCase()] || null;
+        return null;
+      };
 
       // 2. Create only the proposed containers that don't already exist.
       for (const container of result.proposed_containers) {
@@ -246,16 +254,29 @@ export default function RoomView() {
         nameToId[container.name.toLowerCase()] = c.id;
       }
 
-      // 3. Resolve each item's container_id from its (possibly overridden) target.
-      const itemsToCreate = result.items.map((item, i) => {
+      // 3. Promote flagged items to containers; file the rest as items.
+      const itemsToCreate = [];
+      for (let i = 0; i < result.items.length; i++) {
+        const item = result.items[i];
         const target = itemTargets[i] || { kind: 'loose' };
+        if (containerFlags[i]) {
+          if (nameToId[item.name.toLowerCase()] != null) continue;
+          const c = await containersApi.create({
+            room_id: parseInt(roomId),
+            name: item.name,
+            description: '',
+            parent_id: resolveParentId(target),
+          });
+          nameToId[item.name.toLowerCase()] = c.id;
+          continue;
+        }
         let container_id = null;
         if (target.kind === 'existing') {
           container_id = target.containerId;
         } else if (target.kind === 'proposed') {
           container_id = nameToId[target.name.toLowerCase()] || null;
         }
-        return {
+        itemsToCreate.push({
           room_id: parseInt(roomId),
           name: item.name,
           category: item.category,
@@ -263,11 +284,13 @@ export default function RoomView() {
           container_id,
           confidence_score: item.confidence_score,
           scan_session_id: null,
-        };
-      });
+        });
+      }
 
       // 4. Bulk-create items, then refresh and close the review.
-      await itemsApi.bulkCreate({ items: itemsToCreate });
+      if (itemsToCreate.length > 0) {
+        await itemsApi.bulkCreate({ items: itemsToCreate });
+      }
       await loadData();
       const id = reviewingScanId;
       setReviewingScanId(null);
@@ -287,6 +310,9 @@ export default function RoomView() {
       };
       if (s.itemTargets) {
         next.itemTargets = s.itemTargets.filter((_, i) => i !== index);
+      }
+      if (s.containerFlags) {
+        next.containerFlags = s.containerFlags.filter((_, i) => i !== index);
       }
       return next;
     }));
@@ -334,7 +360,12 @@ export default function RoomView() {
           return { kind: 'loose' };
         });
         setScans(prev => prev.map(s => s.sessionId === reviewingScanId
-          ? { ...s, existingContainers: existing, itemTargets }
+          ? {
+            ...s,
+            existingContainers: existing,
+            itemTargets,
+            containerFlags: scan.result.items.map(() => false),
+          }
           : s));
       } catch (err) {
         console.error('Failed to load existing containers for review:', err);
@@ -356,6 +387,15 @@ export default function RoomView() {
         itemTargets[index] = { kind: 'proposed', name: value.slice('proposed:'.length) };
       }
       return { ...s, itemTargets };
+    }));
+  };
+
+  const handleContainerFlagChange = (index, isContainer) => {
+    setScans(prev => prev.map(s => {
+      if (s.sessionId !== reviewingScanId || !s.containerFlags) return s;
+      const containerFlags = [...s.containerFlags];
+      containerFlags[index] = isContainer;
+      return { ...s, containerFlags };
     }));
   };
 
@@ -571,8 +611,10 @@ export default function RoomView() {
             <div className="mb-6">
               <p className="eyebrow mb-2">Discovered items · {reviewingScan.result?.items.length || 0}</p>
               <div className="space-y-2">
-                {reviewingScan.result?.items.map((item, i) => (
-                  <div key={i} className="card py-3">
+                {reviewingScan.result?.items.map((item, i) => {
+                  const isContainer = reviewingScan.containerFlags?.[i] ?? false;
+                  return (
+                  <div key={i} className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''}`}>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[0.62rem] text-surface-600 w-7 flex-shrink-0">
                         {String(i + 1).padStart(2, '0')}
@@ -595,16 +637,28 @@ export default function RoomView() {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-2 pl-9">
                       {item.category && <span className="tag">{item.category}</span>}
-                      {item.suggested_container && (
+                      {item.suggested_container && !isContainer && (
                         <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">→ {item.suggested_container}</span>
+                      )}
+                      {isContainer && (
+                        <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">Container</span>
                       )}
                       {item.confidence_score < 0.8 && (
                         <span className="badge-low">Low confidence</span>
                       )}
                     </div>
-                    {/* Per-item destination selector — reuse existing containers
-                        before creating new ones. Defaults from the AI's
-                        suggested_container; user can override each. */}
+                    {reviewingScan.containerFlags && (
+                      <label className="flex items-center gap-2 mt-2 pl-9 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isContainer}
+                          onChange={(e) => handleContainerFlagChange(i, e.target.checked)}
+                          className="w-4 h-4 rounded border-surface-600 bg-surface-900 accent-primary-500"
+                        />
+                        <span className="text-sm text-surface-400">This is a container</span>
+                      </label>
+                    )}
+                    {/* Per-item destination — file items in, or nest containers under */}
                     {reviewingScan.existingContainers && (() => {
                       const target = reviewingScan.itemTargets?.[i] || { kind: 'loose' };
                       let selectValue = 'loose';
@@ -612,13 +666,15 @@ export default function RoomView() {
                       else if (target.kind === 'proposed') selectValue = `proposed:${target.name}`;
                       return (
                         <div className="flex items-center gap-2 mt-2 pl-9">
-                          <span className="font-mono text-[0.62rem] uppercase tracking-wider text-surface-500">File in</span>
+                          <span className="font-mono text-[0.62rem] uppercase tracking-wider text-surface-500">
+                            {isContainer ? 'Place under' : 'File in'}
+                          </span>
                           <select
                             value={selectValue}
                             onChange={(e) => handleItemTargetChange(i, e.target.value)}
                             className="input-field text-sm py-1 flex-1 min-w-0"
                           >
-                            <option value="loose">Loose in room</option>
+                            <option value="loose">{isContainer ? 'Root in room' : 'Loose in room'}</option>
                             {reviewingScan.existingContainers.length > 0 && (
                               <optgroup label="Existing">
                                 {reviewingScan.existingContainers.map(c => (
@@ -638,7 +694,8 @@ export default function RoomView() {
                       );
                     })()}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -655,7 +712,15 @@ export default function RoomView() {
                 className="btn-primary flex-1"
                 disabled={(reviewingScan.result?.items.length || 0) === 0}
               >
-                File {reviewingScan.result?.items.length || 0} {(reviewingScan.result?.items.length || 0) === 1 ? 'item' : 'items'}
+                {(() => {
+                  const total = reviewingScan.result?.items.length || 0;
+                  const containers = (reviewingScan.containerFlags || []).filter(Boolean).length;
+                  const items = total - containers;
+                  const parts = [];
+                  if (items > 0) parts.push(`${items} ${items === 1 ? 'item' : 'items'}`);
+                  if (containers > 0) parts.push(`${containers} ${containers === 1 ? 'container' : 'containers'}`);
+                  return `File ${parts.join(', ') || '0 items'}`;
+                })()}
               </button>
             </div>
           </div>
@@ -768,6 +833,9 @@ export default function RoomView() {
                   Promise.all(group.items.map(i => itemsApi.update(i.id, updates))).then(loadData)
                 }
                 onDelete={() => itemsApi.delete(group.items[0].id).then(loadData)}
+                onPromote={group.count === 1
+                  ? () => itemsApi.promoteToContainer(group.items[0].id).then(loadData)
+                  : undefined}
               />
             ))}
           </div>

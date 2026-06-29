@@ -72,6 +72,7 @@ export const items = {
   update: (id, data) => request(`/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/items/${id}`, { method: 'DELETE' }),
   bulkCreate: (data) => request('/items/bulk', { method: 'POST', body: JSON.stringify(data) }),
+  promoteToContainer: (id) => request(`/items/${id}/promote-to-container`, { method: 'POST' }),
   move: ({ itemIds, roomId, containerId = null }) =>
     request('/items/move', {
       method: 'POST',

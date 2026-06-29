@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function ItemCard({
   item,
@@ -7,6 +8,7 @@ export default function ItemCard({
   onUpdate,
   onDelete,
   onMove,
+  onPromote,
   selected,
   onToggleSelect,
 }) {
@@ -15,6 +17,9 @@ export default function ItemCard({
   const [editName, setEditName] = useState(item.name);
   const [editCategory, setEditCategory] = useState(item.category || '');
   const [showDelete, setShowDelete] = useState(false);
+  const [showPromote, setShowPromote] = useState(false);
+  const [promoting, setPromoting] = useState(false);
+  const [promoteError, setPromoteError] = useState(null);
   const selectable = typeof onToggleSelect === 'function';
   const isGrouped = count > 1;
 
@@ -35,6 +40,25 @@ export default function ItemCard({
     await onDelete();
   };
 
+  const handlePromote = async () => {
+    setPromoting(true);
+    setPromoteError(null);
+    try {
+      await onPromote();
+      setShowPromote(false);
+      setIsEditing(false);
+    } catch (err) {
+      setPromoteError(err.message || 'Could not convert to container');
+    } finally {
+      setPromoting(false);
+    }
+  };
+
+  const openPromoteModal = () => {
+    setPromoteError(null);
+    setShowPromote(true);
+  };
+
   const getConfidenceBadge = () => {
     if (item.confidence_score === null || item.confidence_score >= 0.9) return null;
     const pct = Math.round(item.confidence_score * 100);
@@ -42,8 +66,68 @@ export default function ItemCard({
     return <span className={cls}>AI·{pct}%</span>;
   };
 
+  const promoteModal = showPromote && createPortal(
+    <div
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={() => !promoting && setShowPromote(false)}
+    >
+      <div
+        className="card w-full max-w-md animate-rise mx-auto"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-labelledby="promote-title"
+        aria-modal="true"
+      >
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-primary-950/50 border border-primary-900/50 grid place-items-center flex-shrink-0">
+            <svg className="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <p className="eyebrow mb-1">Make container</p>
+            <h3 id="promote-title" className="font-display text-xl font-semibold text-surface-100">
+              Convert “{item.name}”?
+            </h3>
+          </div>
+        </div>
+
+        <p className="text-sm text-surface-400 mb-4">
+          This item will be removed from the catalogue and added to the container tree. You can then scan inside it and file other items there.
+        </p>
+
+        {promoteError && (
+          <div className="card border-red-900 bg-red-950/30 mb-4 py-2.5 px-3">
+            <p className="text-red-400 text-sm">{promoteError}</p>
+          </div>
+        )}
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            type="button"
+            onClick={handlePromote}
+            disabled={promoting}
+            className="btn-primary flex-1 order-1 sm:order-2"
+          >
+            {promoting ? 'Converting…' : 'Convert to container'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowPromote(false)}
+            disabled={promoting}
+            className="btn-secondary flex-1 order-2 sm:order-1"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+
   if (isEditing) {
     return (
+      <>
       <div className="card">
         <div className="space-y-3">
           {isGrouped && (
@@ -73,8 +157,19 @@ export default function ItemCard({
             <button onClick={handleSave} className="btn-primary text-sm flex-1">Save</button>
             <button onClick={() => setIsEditing(false)} className="btn-secondary text-sm flex-1">Cancel</button>
           </div>
+          {!isGrouped && onPromote && (
+            <button
+              type="button"
+              onClick={openPromoteModal}
+              className="btn-secondary text-sm w-full"
+            >
+              Make container
+            </button>
+          )}
         </div>
       </div>
+      {promoteModal}
+      </>
     );
   }
 
@@ -158,6 +253,17 @@ export default function ItemCard({
               </svg>
             </button>
           )}
+          {!isGrouped && onPromote && (
+            <button
+              onClick={openPromoteModal}
+              className="p-1.5 text-surface-500 hover:text-primary-400 transition-colors"
+              aria-label={`Make ${item.name} a container`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -172,6 +278,8 @@ export default function ItemCard({
           </div>
         </div>
       )}
+
+      {promoteModal}
     </div>
   );
 }

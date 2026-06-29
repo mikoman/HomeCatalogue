@@ -9,6 +9,7 @@ from app.models.room import Room
 from app.models.container import Container
 from app.models.house import House
 from app.schemas.item import ItemCreate, ItemUpdate, ItemRead, ItemBulkCreate, ItemMove, ItemSearchResult
+from app.schemas.container import ContainerRead
 from app.services.search import item_search_filter
 
 router = APIRouter(prefix="/api/items", tags=["items"])
@@ -143,6 +144,31 @@ def get_item(item_id: int, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     return item
+
+
+@router.post("/{item_id}/promote-to-container", response_model=ContainerRead, status_code=201)
+def promote_item_to_container(item_id: int, db: Session = Depends(get_db)):
+    """Convert an item into a real container (same name, notes become description)."""
+    item = db.query(Item).filter(Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if item.container_id is not None:
+        parent = db.query(Container).filter(Container.id == item.container_id).first()
+        if not parent or parent.room_id != item.room_id:
+            raise HTTPException(status_code=400, detail="Invalid parent container for this item")
+
+    container = Container(
+        room_id=item.room_id,
+        parent_id=item.container_id,
+        name=item.name,
+        description=item.notes or "",
+    )
+    db.add(container)
+    db.delete(item)
+    db.commit()
+    db.refresh(container)
+    return container
 
 
 @router.put("/{item_id}", response_model=ItemRead)
