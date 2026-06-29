@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import { houses as housesApi, rooms as roomsApi } from '../api/client';
 
@@ -87,23 +87,30 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         flex flex-col safe-top
       `}>
-        {/* Logo */}
+        {/* Brand */}
         <div className="p-4 border-b border-surface-800">
-          <Link to="/houses" onClick={onClose} className="flex items-center gap-2">
-            <svg className="w-8 h-8 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-            <span className="text-lg font-bold text-surface-100">Home Catalogue</span>
+          <Link to="/houses" onClick={onClose} className="flex items-center gap-3 group">
+            <span className="w-9 h-9 rounded-md bg-primary-500 grid place-items-center flex-shrink-0
+                             shadow-sm group-hover:shadow-glow transition-shadow">
+              <svg className="w-5 h-5 text-surface-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </span>
+            <span className="leading-tight">
+              <span className="block font-display font-bold text-surface-100 tracking-tight">Home Catalogue</span>
+              <span className="block eyebrow mt-0.5">Inventory System</span>
+            </span>
           </Link>
         </div>
 
         {/* Houses list */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+          <p className="eyebrow px-3 pb-2 pt-1">Properties</p>
           {houses.map(house => (
-            <div key={house.id} className="rounded-lg overflow-hidden">
+            <div key={house.id} className="group/house rounded-md overflow-hidden">
               <button
                 onClick={() => toggleHouse(house.id)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-surface-800 transition-colors text-left"
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-md hover:bg-surface-800 transition-colors text-left"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <svg className="w-5 h-5 text-surface-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,9 +118,9 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
                   </svg>
                   <span className="text-surface-200 font-medium truncate">{house.name}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-surface-500">
-                    {(rooms[house.id] || []).length}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[0.7rem] text-surface-500">
+                    {String((rooms[house.id] || []).length).padStart(2, '0')}
                   </span>
                   <svg
                     className={`w-4 h-4 text-surface-500 transition-transform ${expandedHouses[house.id] ? 'rotate-90' : ''}`}
@@ -129,16 +136,20 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
                 <div className="ml-4 pl-4 border-l border-surface-800 space-y-0.5 pb-2">
                   {(rooms[house.id] || []).map(room => (
                     <div key={room.id} className="group flex items-center">
-                      <Link
+                      <NavLink
                         to={`/rooms/${room.id}`}
                         onClick={() => { onClose?.(); }}
-                        className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-800 transition-colors text-left text-sm"
+                        className={({ isActive }) => `flex-1 flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left text-sm border-l-2 ${
+                          isActive
+                            ? 'bg-surface-800 border-primary-500 text-surface-100'
+                            : 'border-transparent hover:bg-surface-800 text-surface-400'
+                        }`}
                       >
-                        <svg className="w-4 h-4 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                         </svg>
-                        <span className="text-surface-400 truncate">{room.name}</span>
-                      </Link>
+                        <span className="truncate">{room.name}</span>
+                      </NavLink>
                       <button
                         onClick={(e) => handleDeleteRoom(house.id, room.id, e)}
                         className="opacity-0 group-hover:opacity-100 p-1 text-surface-500 hover:text-red-400 transition-all"
@@ -153,25 +164,25 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
 
                   {/* Add room */}
                   {showAddRoom === house.id ? (
-                    <form onSubmit={(e) => handleAddRoom(house.id)} className="flex gap-1 px-3 py-1">
+                    <form onSubmit={(e) => { e.preventDefault(); handleAddRoom(house.id); }} className="flex gap-1 px-3 py-1">
                       <input
                         value={newRoomName}
                         onChange={(e) => setNewRoomName(e.target.value)}
-                        placeholder="Room name..."
+                        placeholder="Room name…"
                         className="input-field text-sm py-1.5"
                         autoFocus
                       />
-                      <button type="submit" className="btn-primary text-xs px-2">Add</button>
+                      <button type="submit" className="btn-primary text-xs px-2.5">Add</button>
                     </form>
                   ) : (
                     <button
                       onClick={() => setShowAddRoom(house.id)}
-                      className="flex items-center gap-2 px-3 py-2 text-surface-500 hover:text-surface-300 text-sm transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 text-surface-500 hover:text-primary-400 text-sm transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                       </svg>
-                      Add Room
+                      Add room
                     </button>
                   )}
                 </div>
@@ -180,9 +191,9 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
               {/* Delete house */}
               <button
                 onClick={(e) => handleDeleteHouse(house.id, e)}
-                className="w-full text-left px-3 py-1 text-xs text-surface-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="w-full text-left px-3 py-1 font-mono text-[0.62rem] uppercase tracking-wider text-surface-600 hover:text-red-400 opacity-0 group-hover/house:opacity-100 transition-opacity"
               >
-                Delete house
+                Delete property
               </button>
             </div>
           ))}
@@ -193,24 +204,31 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
               <input
                 value={newHouseName}
                 onChange={(e) => setNewHouseName(e.target.value)}
-                placeholder="House name..."
+                placeholder="House name…"
                 className="input-field text-sm py-1.5"
                 autoFocus
               />
-              <button type="submit" className="btn-primary text-xs px-2">Add</button>
+              <button type="submit" className="btn-primary text-xs px-2.5">Add</button>
             </form>
           ) : (
             <button
               onClick={() => setShowAddHouse(true)}
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-surface-500 hover:text-surface-300 hover:bg-surface-800 rounded-lg transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2.5 mt-1 text-surface-400 hover:text-primary-400 hover:bg-surface-800 rounded-md transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Add House
+              <span className="font-medium text-sm">Add property</span>
             </button>
           )}
         </nav>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-surface-800">
+          <p className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
+            {houses.length} {houses.length === 1 ? 'PROPERTY' : 'PROPERTIES'} ON FILE
+          </p>
+        </div>
       </aside>
     </>
   );

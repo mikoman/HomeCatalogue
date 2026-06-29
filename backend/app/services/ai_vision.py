@@ -160,29 +160,31 @@ async def _process_anthropic(image_path: str) -> ScanResult:
 
 
 async def _process_ollama(image_path: str) -> ScanResult:
-    """Process image using local Ollama with Llava."""
+    """Process image using a local Ollama vision model (e.g. llava, qwen3-vl)."""
     import httpx
 
     image_b64 = _encode_image(image_path)
     base_url = settings.ollama_base_url.rstrip("/")
 
-    response = await httpx.AsyncClient().post(
-        f"{base_url}/api/chat",
-        json={
-            "model": settings.ollama_model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
-                    "images": [image_b64],
-                },
-            ],
-            "stream": False,
-            "format": "json",
-        },
-        timeout=120.0,
-    )
+    # Pass the JSON schema as `format` (Ollama structured outputs) so the model
+    # returns the exact shape _parse_scan_result expects, not just any valid JSON.
+    async with httpx.AsyncClient(timeout=300.0) as client:  # ponytail: 300s covers cold model load + slow 8B vision; raise if a bigger model needs it
+        response = await client.post(
+            f"{base_url}/api/chat",
+            json={
+                "model": settings.ollama_model,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
+                        "images": [image_b64],
+                    },
+                ],
+                "stream": False,
+                "format": JSON_SCHEMA,
+            },
+        )
     response.raise_for_status()
     data = response.json()
     content = data.get("message", {}).get("content", "{}")
@@ -190,66 +192,45 @@ async def _process_ollama(image_path: str) -> ScanResult:
 
 
 async def _process_omlx(image_path: str) -> ScanResult:
-    """Process image using oMLX with LLaVA models (Apple Silicon)."""
-    import subprocess
-    import json
-    import base64
+    """Process image via an oMLX server (OpenAI-compatible API, runs on the host).
 
-    # Encode image to base64
-    with open(image_path, "rb") as f:
-        image_b64 = base64.b64encode(f.read()).decode("utf-8")
+    The backend runs in Docker, so OMLX_BASE_URL must point at the host
+    (e.g. http://host.docker.internal:PORT/v1), not localhost.
+    """
+    import httpx
 
-    # Build the prompt for oMLX
-    prompt = f"""{SYSTEM_PROMPT}
+    image_b64 = _encode_image(image_path)
+    base_url = settings.omlx_base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {settings.omlx_api_key}"} if settings.omlx_api_key else {}
 
-Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.
-
-Image (base64): {image_b64}"""
-
-    try:
-        # Run oMLX model via subprocess
-        # oMLX typically uses mlx-lm or similar Python API
-        # This assumes oMLX CLI is available or uses Python API
-        result = subprocess.run(
-            [
-                "python3", "-c",
-                f"""
-import sys
-try:
-    from mlx_vlm import load, generate
-    model, processor = load("{settings.omlx_model}")
-    response = generate(
-        model,
-        processor,
-        prompt="{prompt[:2000]}",  # Truncate to avoid command line limits
-        max_tokens=4096,
-        verbose=False
-    )
-    print(response)
-except ImportError:
-    # Fallback: try mlx-lm
-    from mlx_lm import load as mlx_load, generate as mlx_generate
-    model, tokenizer = mlx_load("{settings.omlx_model}")
-    # Note: mlx-lm doesn't support vision, so this is a fallback
-    print("Error: mlx-lm does not support vision models. Please install mlx-vlm.")
-    sys.exit(1)
-"""
-            ],
-            capture_output=True,
-            text=True,
-            timeout=180,
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        response = await client.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": settings.omlx_model,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
+                            },
+                            {
+                                "type": "text",
+                                "text": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
+                            },
+                        ],
+                    },
+                ],
+                "stream": False,
+            },
         )
-
-        if result.returncode != 0:
-            raise RuntimeError(f"oMLX error: {result.stderr}")
-
-        content = result.stdout.strip()
-        return _parse_scan_result(content)
-
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("oMLX processing timed out (180s limit)")
-    except FileNotFoundError:
-        raise RuntimeError("python3 not found. Ensure Python 3 is installed.")
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+    return _parse_scan_result(content)
 
 
 def _parse_scan_result(content: str) -> ScanResult:

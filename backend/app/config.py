@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llava")
     omlx_model: str = os.getenv("OMLX_MODEL", "mlx-community/llava-1.5-7b-4bit")
+    # oMLX runs on the host; from inside Docker reach it via host.docker.internal
+    omlx_base_url: str = os.getenv("OMLX_BASE_URL", "http://host.docker.internal:8000/v1")
+    omlx_api_key: str = os.getenv("OMLX_API_KEY", "")
 
     # Server
     host: str = os.getenv("HOST", "0.0.0.0")

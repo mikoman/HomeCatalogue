@@ -8,15 +8,11 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
   const getChildren = (parentId) =>
     containers.filter(c => c.parent_id === parentId);
 
-  const toggleExpand = (id) => {
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
   const handleAddChild = async (parentId) => {
     if (!newName.trim()) return;
     try {
       const { containers: containersApi } = await import('../api/client');
-      const container = await containersApi.create({
+      await containersApi.create({
         room_id: roomId,
         parent_id: parentId,
         name: newName.trim(),
@@ -38,23 +34,24 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
       <div key={container.id}>
         <button
           onClick={() => onSelect?.(container.id)}
-          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${
             isSelected
-              ? 'bg-primary-900/30 text-primary-400 border border-primary-800'
+              ? 'bg-surface-800 text-primary-400'
               : 'text-surface-300 hover:bg-surface-800'
           }`}
           style={{ paddingLeft: `${depth * 16 + 12}px` }}
         >
-          {children.length > 0 && (
+          {children.length > 0 ? (
             <svg
               className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
+          ) : (
+            <span className="w-4" />
           )}
-          {children.length === 0 && <span className="w-4" />}
-          <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-primary-500' : 'text-surface-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
           <span className="text-sm truncate">{container.name}</span>
@@ -73,17 +70,17 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="New container..."
+                  placeholder="New container…"
                   className="input-field text-sm py-1.5 flex-1"
                   autoFocus
                 />
-                <button type="submit" className="btn-primary text-xs px-2">Add</button>
-                <button type="button" onClick={() => setAddingTo(null)} className="btn-secondary text-xs px-2">✕</button>
+                <button type="submit" className="btn-primary text-xs px-2.5">Add</button>
+                <button type="button" onClick={() => setAddingTo(null)} className="btn-secondary text-xs px-2.5">✕</button>
               </form>
             ) : (
               <button
                 onClick={() => setAddingTo(container.id)}
-                className="text-xs text-surface-500 hover:text-surface-300 flex items-center gap-1"
+                className="font-mono text-[0.62rem] uppercase tracking-wider text-surface-500 hover:text-primary-400 flex items-center gap-1 transition-colors"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -103,7 +100,7 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
   if (containers.length === 0) return null;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-0.5">
       {rootContainers.map(container => renderContainer(container))}
     </div>
   );

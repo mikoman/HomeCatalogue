@@ -22,8 +22,9 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
 
   const getConfidenceBadge = () => {
     if (item.confidence_score === null || item.confidence_score >= 0.9) return null;
-    if (item.confidence_score >= 0.7) return <span className="badge-medium">AI: {Math.round(item.confidence_score * 100)}%</span>;
-    return <span className="badge-low">AI: {Math.round(item.confidence_score * 100)}%</span>;
+    const pct = Math.round(item.confidence_score * 100);
+    const cls = item.confidence_score >= 0.7 ? 'badge-medium' : 'badge-low';
+    return <span className={cls}>AI·{pct}%</span>;
   };
 
   if (isEditing) {
@@ -31,7 +32,7 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
       <div className="card">
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-surface-500 mb-1">Name</label>
+            <label className="block font-mono text-[0.62rem] uppercase tracking-wider text-surface-500 mb-1">Name</label>
             <input
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
@@ -40,11 +41,11 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
             />
           </div>
           <div>
-            <label className="block text-xs text-surface-500 mb-1">Category</label>
+            <label className="block font-mono text-[0.62rem] uppercase tracking-wider text-surface-500 mb-1">Category</label>
             <input
               value={editCategory}
               onChange={(e) => setEditCategory(e.target.value)}
-              placeholder="e.g., Electronics, Food"
+              placeholder="e.g. Electronics, Food"
               className="input-field text-sm"
             />
           </div>
@@ -58,29 +59,30 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
   }
 
   return (
-    <div className="card group hover:border-surface-700 transition-all">
+    <div className="card group hover:border-surface-600 transition-all">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <h3 className="text-surface-100 font-medium truncate">{item.name}</h3>
-          {item.category && (
-            <span className="inline-block mt-1 badge bg-surface-800 text-surface-400">
-              {item.category}
-            </span>
-          )}
+          <span className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
+            #{String(item.id).padStart(4, '0')}
+          </span>
+          <h3 className="text-surface-100 font-medium truncate mt-0.5">{item.name}</h3>
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            {item.category && <span className="tag">{item.category}</span>}
+            {getConfidenceBadge()}
+          </div>
           {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-2">
               {item.tags.slice(0, 3).map(tag => (
-                <span key={tag} className="text-xs text-surface-500">#{tag}</span>
+                <span key={tag} className="font-mono text-[0.7rem] text-surface-500">#{tag}</span>
               ))}
               {item.tags.length > 3 && (
-                <span className="text-xs text-surface-600">+{item.tags.length - 3}</span>
+                <span className="font-mono text-[0.7rem] text-surface-600">+{item.tags.length - 3}</span>
               )}
             </div>
           )}
-          {getConfidenceBadge()}
           {item.date_added && (
-            <p className="text-xs text-surface-600 mt-2">
-              Added {new Date(item.date_added).toLocaleDateString()}
+            <p className="font-mono text-[0.62rem] text-surface-600 mt-2.5">
+              {new Date(item.date_added).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })}
             </p>
           )}
         </div>

@@ -1,7 +1,6 @@
 """Storage utilities for managing uploaded images."""
 
-import os
-import aiofiles
+from pathlib import Path
 from fastapi import UploadFile
 from app.config import settings
 

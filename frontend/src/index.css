@@ -6,82 +6,128 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
-  
+
   body {
-    @apply bg-surface-950 text-surface-100;
+    @apply bg-surface-950 text-surface-300;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     min-height: 100dvh;
     overflow-x: hidden;
+    /* Faint graph-paper grid — the "manifest paper" beneath everything */
+    background-color: #0A0A0B;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
+  }
+
+  /* Keyboard focus — visible everywhere, never trapped behind outline:none */
+  :focus-visible {
+    outline: 2px solid theme('colors.primary.500');
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 
   /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-surface-900;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-surface-700 rounded-full;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-surface-600;
-  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { @apply bg-surface-950; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-700 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-600; }
 }
 
 @layer components {
   .btn-primary {
-    @apply px-4 py-2.5 bg-primary-600 hover:bg-primary-500 text-white font-medium 
-           rounded-lg transition-colors duration-150 active:scale-[0.98]
-           disabled:opacity-50 disabled:cursor-not-allowed
-           flex items-center justify-center gap-2;
+    @apply px-4 py-2.5 bg-primary-500 hover:bg-primary-400 text-surface-950 font-semibold
+           rounded-md transition-all duration-150 active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary-500
+           flex items-center justify-center gap-2 shadow-sm hover:shadow-glow;
   }
-  
+
   .btn-secondary {
-    @apply px-4 py-2.5 bg-surface-800 hover:bg-surface-700 text-surface-200 font-medium 
-           rounded-lg transition-colors duration-150 active:scale-[0.98]
-           border border-surface-700;
+    @apply px-4 py-2.5 bg-surface-900 hover:bg-surface-800 text-surface-200 font-medium
+           rounded-md transition-colors duration-150 active:scale-[0.98]
+           border border-surface-700 hover:border-surface-600
+           flex items-center justify-center gap-2;
   }
 
   .btn-danger {
-    @apply px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-medium 
-           rounded-lg transition-colors duration-150 active:scale-[0.98];
+    @apply px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-medium
+           rounded-md transition-colors duration-150 active:scale-[0.98]
+           flex items-center justify-center gap-2;
   }
 
   .input-field {
-    @apply w-full px-4 py-2.5 bg-surface-900 border border-surface-700 
-           rounded-lg text-surface-100 placeholder-surface-500
-           focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent
+    @apply w-full px-3.5 py-2.5 bg-surface-950 border border-surface-700
+           rounded-md text-surface-100 placeholder-surface-500 font-sans
+           focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500
            transition-all duration-150;
   }
 
   .card {
-    @apply bg-surface-900 border border-surface-800 rounded-xl p-4;
+    @apply bg-surface-900 border border-surface-800 rounded-lg p-4;
+  }
+
+  /* Mono "data layer" — counts, IDs, categories, labels: the printed-manifest voice */
+  .eyebrow {
+    @apply font-mono text-[0.68rem] uppercase tracking-[0.22em] text-primary-500;
+  }
+
+  .code {
+    @apply font-mono text-surface-500;
+  }
+
+  .tag {
+    @apply inline-flex items-center font-mono text-[0.62rem] uppercase tracking-wider
+           px-1.5 py-0.5 rounded-sm bg-surface-800 text-surface-300 border border-surface-700;
   }
 
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center font-mono text-[0.62rem] uppercase tracking-wider
+           px-1.5 py-0.5 rounded-sm;
   }
 
-  .badge-high {
-    @apply badge bg-green-900/50 text-green-400;
+  .badge-high   { @apply badge bg-primary-900/40 text-primary-400 border border-primary-900; }
+  .badge-medium { @apply badge bg-primary-900/40 text-primary-400 border border-primary-900/80; }
+  .badge-low    { @apply badge bg-red-950/60 text-red-400 border border-red-900/60; }
+
+  /* Signature: hazard tape. Static accent + animated scanner band. */
+  .hazard {
+    background-image: repeating-linear-gradient(
+      45deg,
+      theme('colors.surface.950') 0 9px,
+      theme('colors.primary.500') 9px 18px
+    );
   }
 
-  .badge-medium {
-    @apply badge bg-yellow-900/50 text-yellow-400;
+  .scan-stripes {
+    background-image: repeating-linear-gradient(
+      45deg,
+      theme('colors.primary.500') 0 10px,
+      theme('colors.surface.950') 10px 20px
+    );
+    background-size: 28.28px 28.28px; /* 20px * √2 — exact diagonal tile for a seamless loop */
+    animation: scan-move 0.7s linear infinite;
   }
 
-  .badge-low {
-    @apply badge bg-red-900/50 text-red-400;
+  @keyframes scan-move {
+    to { background-position: 28.28px 0; }
   }
 }
 
-/* Safe area padding for mobile */
+/* Safe-area padding for notched mobile */
 @supports (padding: max(0px)) {
-  .safe-top {
-    padding-top: max(env(safe-area-inset-top), 0px);
+  .safe-top { padding-top: max(env(safe-area-inset-top), 0px); }
+  .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
-  .safe-bottom {
-    padding-bottom: max(env(safe-area-inset-bottom), 0px);
-  }
+  .scan-stripes { animation: none; }
 }
