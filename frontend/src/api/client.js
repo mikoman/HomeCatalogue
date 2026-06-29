@@ -126,4 +126,5 @@ export const aiSettings = {
     if (baseUrl) params.set('base_url', baseUrl);
     return request(`/settings/ai/test?${params.toString()}`);
   },
+  resetAll: () => request('/settings/reset', { method: 'POST' }),
 };

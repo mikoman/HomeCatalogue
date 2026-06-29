@@ -1,6 +1,15 @@
 """AI settings router — runtime provider/model configuration."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query
+from app.config import settings as config
+from app.database import SessionLocal
+from app.models.item import Item
+from app.models.container import Container
+from app.models.scan_session import ScanSession
+from app.models.room import Room
+from app.models.house import House
 from app.schemas.settings import (
     AISettingsRead,
     AISettingsUpdate,
@@ -79,3 +88,34 @@ async def test_ai_connection(
         running_in_docker=running_in_docker(),
         **result,
     )
+
+
+@router.post("/reset")
+def reset_all_data():
+    """Wipe ALL catalogue data and uploaded images — a full factory reset.
+
+    Deletes every house, room, container, item, scan session, and image file.
+    Keeps AI provider settings (ai_settings.json) so the user doesn't have to
+    reconfigure their model. Irreversible.
+    """
+    db = SessionLocal()
+    try:
+        # Child → parent so foreign keys stay satisfied regardless of enforcement.
+        db.query(Item).delete()
+        db.query(Container).delete()
+        db.query(ScanSession).delete()
+        db.query(Room).delete()
+        db.query(House).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    removed = 0
+    upload_dir = Path(config.upload_dir)
+    if upload_dir.exists():
+        for f in upload_dir.iterdir():
+            if f.is_file():
+                f.unlink()
+                removed += 1
+
+    return {"status": "reset", "images_removed": removed}
