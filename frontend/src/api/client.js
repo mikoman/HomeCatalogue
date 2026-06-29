@@ -45,14 +45,18 @@ export const rooms = {
 
 // Containers
 export const containers = {
-  list: (roomId, parentId = null) => {
-    const params = parentId !== null ? `?room_id=${roomId}&parent_id=${parentId}` : `?room_id=${roomId}`;
-    return request(`/containers/${params}`);
+  list: (roomId, parentId = null, { includeAll = false } = {}) => {
+    const params = new URLSearchParams({ room_id: roomId });
+    if (parentId !== null) params.set('parent_id', parentId);
+    if (includeAll) params.set('include_all', 'true');
+    return request(`/containers/?${params.toString()}`);
   },
   get: (id) => request(`/containers/${id}`),
   create: (data) => request('/containers/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/containers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/containers/${id}`, { method: 'DELETE' }),
+  move: (id, { roomId }) =>
+    request(`/containers/${id}/move`, { method: 'POST', body: JSON.stringify({ room_id: roomId }) }),
 };
 
 // Items
@@ -66,6 +70,11 @@ export const items = {
   update: (id, data) => request(`/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => request(`/items/${id}`, { method: 'DELETE' }),
   bulkCreate: (data) => request('/items/bulk', { method: 'POST', body: JSON.stringify(data) }),
+  move: ({ itemIds, roomId, containerId = null }) =>
+    request('/items/move', {
+      method: 'POST',
+      body: JSON.stringify({ item_ids: itemIds, room_id: roomId, container_id: containerId }),
+    }),
 };
 
 // Scan

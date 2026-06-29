@@ -6,7 +6,9 @@ from sqlalchemy import or_
 from typing import List, Optional
 from app.database import get_db
 from app.models.item import Item
-from app.schemas.item import ItemCreate, ItemUpdate, ItemRead, ItemBulkCreate
+from app.models.room import Room
+from app.models.container import Container
+from app.schemas.item import ItemCreate, ItemUpdate, ItemRead, ItemBulkCreate, ItemMove
 
 router = APIRouter(prefix="/api/items", tags=["items"])
 
@@ -40,7 +42,6 @@ def list_items(
 
 @router.post("/", response_model=ItemRead, status_code=201)
 def create_item(data: ItemCreate, db: Session = Depends(get_db)):
-    from app.models.room import Room
     if not db.query(Room).filter(Room.id == data.room_id).first():
         raise HTTPException(status_code=404, detail="Room not found")
     item = Item(**data.model_dump())
@@ -62,6 +63,49 @@ def bulk_create_items(data: ItemBulkCreate, db: Session = Depends(get_db)):
     for item in created:
         db.refresh(item)
     return created
+
+
+@router.post("/move", response_model=List[ItemRead])
+def move_items(data: ItemMove, db: Session = Depends(get_db)):
+    """Move one or more items into a target room and (optionally) a container.
+
+    Same-house only. If a container_id is given it must belong to the target
+    room; assigning it also fixes the item's room_id to that container's room,
+    normalizing any latent item.room_id != container.room_id rows.
+    """
+    target_room = db.query(Room).filter(Room.id == data.room_id).first()
+    if not target_room:
+        raise HTTPException(status_code=404, detail="Target room not found")
+
+    if data.container_id is not None:
+        container = db.query(Container).filter(Container.id == data.container_id).first()
+        if not container:
+            raise HTTPException(status_code=404, detail="Container not found")
+        if container.room_id != target_room.id:
+            raise HTTPException(
+                status_code=400,
+                detail="Container must be in the target room",
+            )
+
+    moved = []
+    for item_id in data.item_ids:
+        item = db.query(Item).filter(Item.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Item {item_id} not found")
+        current_room = db.query(Room).filter(Room.id == item.room_id).first()
+        if current_room and current_room.house_id != target_room.house_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot move items between houses",
+            )
+        item.room_id = target_room.id
+        item.container_id = data.container_id
+        moved.append(item)
+
+    db.commit()
+    for item in moved:
+        db.refresh(item)
+    return moved
 
 
 @router.get("/{item_id}", response_model=ItemRead)

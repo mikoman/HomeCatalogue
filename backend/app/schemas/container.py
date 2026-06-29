@@ -27,3 +27,12 @@ class ContainerRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ContainerMove(BaseModel):
+    """Re-home a container (and its whole subtree) into another room.
+
+    The moved container is detached to a root (parent_id = null) in the new
+    room, since its old parent stays behind. Same-house only.
+    """
+    room_id: int

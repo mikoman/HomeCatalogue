@@ -46,3 +46,14 @@ class ItemRead(BaseModel):
 class ItemBulkCreate(BaseModel):
     """Used for batch-creating items from an AI scan result."""
     items: list[ItemCreate]
+
+
+class ItemMove(BaseModel):
+    """Move one or more items into a room (and optionally a container in it).
+
+    Assigning a container implicitly places the item in that container's room,
+    so `room_id` and `container_id` must be consistent (container ∈ room).
+    """
+    item_ids: list[int]
+    room_id: int
+    container_id: int | None = None

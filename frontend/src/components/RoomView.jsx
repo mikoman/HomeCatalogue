@@ -4,6 +4,7 @@ import { rooms as roomsApi, items as itemsApi, containers as containersApi, scan
 import { compressImage } from '../utils/imageCompression';
 import ItemCard from './ItemCard';
 import ContainerTree from './ContainerTree';
+import MovePicker from './MovePicker';
 
 // Persist the active (in-flight / ready / failed) scans per room so the queue
 // re-attaches after navigating away and back or a page refresh. The backend
@@ -52,6 +53,8 @@ export default function RoomView() {
   const [reviewingScanId, setReviewingScanId] = useState(null);
   const [selectedContainer, setSelectedContainer] = useState(null);
   const [filterCategory, setFilterCategory] = useState(null);
+  const [selectedItemIds, setSelectedItemIds] = useState(new Set());  // multi-select for item moves
+  const [movingItems, setMovingItems] = useState(null);               // number[] when item-move picker is open
 
   // Derived queue buckets
   const inFlight = scans.filter(s => s.status === 'pending' || s.status === 'processing');
@@ -185,44 +188,68 @@ export default function RoomView() {
     e.target.value = null;
   };
 
+  // ---- multi-select item moves ----
+  const toggleSelectItem = (id) => {
+    setSelectedItemIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleMoveSelectedItems = () => {
+    if (selectedItemIds.size === 0) return;
+    setMovingItems([...selectedItemIds]);
+  };
+
+  const handleMoveSingleItem = (id) => {
+    setMovingItems([id]);
+  };
+
   // ---- review overlay (operates on the selected scan, not a single global result) ----
   const handleAcceptAll = async () => {
     if (!reviewingScan?.result) return;
     const result = reviewingScan.result;
+    const existingContainers = reviewingScan.existingContainers || [];
+    const itemTargets = reviewingScan.itemTargets || [];
     try {
-      const itemsToCreate = result.items.map(item => ({
-        room_id: parseInt(roomId),
-        name: item.name,
-        category: item.category,
-        tags: item.tags,
-        container_id: null,
-        confidence_score: item.confidence_score,
-        scan_session_id: null,
-      }));
+      // 1. Build nameToId from existing containers (case-insensitive).
+      const nameToId = {};
+      existingContainers.forEach(c => { nameToId[c.name.toLowerCase()] = c.id; });
 
-      // Create containers first
-      const createdContainers = [];
+      // 2. Create only the proposed containers that don't already exist.
       for (const container of result.proposed_containers) {
+        if (nameToId[container.name.toLowerCase()] != null) continue;
         const c = await containersApi.create({
           room_id: parseInt(roomId),
           name: container.name,
           description: container.description,
         });
-        createdContainers.push(c);
+        nameToId[container.name.toLowerCase()] = c.id;
       }
 
-      // Map suggested containers to IDs
-      const containerMap = {};
-      createdContainers.forEach(c => { containerMap[c.name.toLowerCase()] = c.id; });
+      // 3. Resolve each item's container_id from its (possibly overridden) target.
+      const itemsToCreate = result.items.map((item, i) => {
+        const target = itemTargets[i] || { kind: 'loose' };
+        let container_id = null;
+        if (target.kind === 'existing') {
+          container_id = target.containerId;
+        } else if (target.kind === 'proposed') {
+          container_id = nameToId[target.name.toLowerCase()] || null;
+        }
+        return {
+          room_id: parseInt(roomId),
+          name: item.name,
+          category: item.category,
+          tags: item.tags,
+          container_id,
+          confidence_score: item.confidence_score,
+          scan_session_id: null,
+        };
+      });
 
-      const itemsToCreateWithContainers = itemsToCreate.map(item => ({
-        ...item,
-        container_id: item.suggested_container
-          ? containerMap[item.suggested_container.toLowerCase()] || null
-          : null,
-      }));
-
-      await itemsApi.bulkCreate({ items: itemsToCreateWithContainers });
+      // 4. Bulk-create items, then refresh and close the review.
+      await itemsApi.bulkCreate({ items: itemsToCreate });
       await loadData();
       const id = reviewingScanId;
       setReviewingScanId(null);
@@ -234,10 +261,17 @@ export default function RoomView() {
 
   const handleRejectItem = (index) => {
     if (!reviewingScan?.result) return;
-    setScans(prev => prev.map(s => s.sessionId === reviewingScanId ? {
-      ...s,
-      result: { ...s.result, items: s.result.items.filter((_, i) => i !== index) },
-    } : s));
+    setScans(prev => prev.map(s => {
+      if (s.sessionId !== reviewingScanId) return s;
+      const next = {
+        ...s,
+        result: { ...s.result, items: s.result.items.filter((_, i) => i !== index) },
+      };
+      if (s.itemTargets) {
+        next.itemTargets = s.itemTargets.filter((_, i) => i !== index);
+      }
+      return next;
+    }));
   };
 
   const handleEditItem = (index, field, value) => {
@@ -249,6 +283,59 @@ export default function RoomView() {
         items: s.result.items.map((it, i) => i === index ? { ...it, [field]: value } : it),
       },
     } : s));
+  };
+
+  // When a scan's review overlay opens, fetch the room's existing containers
+  // and seed a per-item destination (existing | proposed | loose) from the AI's
+  // suggested_container. The user can override each one before accepting.
+  useEffect(() => {
+    if (reviewingScanId == null) return;
+    const scan = scans.find(s => s.sessionId === reviewingScanId);
+    if (!scan || !scan.result) return;
+    if (scan.existingContainers) return;  // already initialized
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const existing = await containersApi.list(parseInt(roomId), null, { includeAll: true });
+        if (cancelled) return;
+        const nameToId = {};
+        existing.forEach(c => { nameToId[c.name.toLowerCase()] = c.id; });
+        const proposedNames = (scan.result.proposed_containers || []).map(c => c.name.toLowerCase());
+        const itemTargets = scan.result.items.map(item => {
+          const sc = item.suggested_container;
+          if (sc && nameToId[sc.toLowerCase()] != null) {
+            return { kind: 'existing', containerId: nameToId[sc.toLowerCase()] };
+          }
+          if (sc && proposedNames.includes(sc.toLowerCase())) {
+            return { kind: 'proposed', name: sc };
+          }
+          return { kind: 'loose' };
+        });
+        setScans(prev => prev.map(s => s.sessionId === reviewingScanId
+          ? { ...s, existingContainers: existing, itemTargets }
+          : s));
+      } catch (err) {
+        console.error('Failed to load existing containers for review:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewingScanId, roomId]);
+
+  const handleItemTargetChange = (index, value) => {
+    setScans(prev => prev.map(s => {
+      if (s.sessionId !== reviewingScanId || !s.itemTargets) return s;
+      const itemTargets = [...s.itemTargets];
+      if (value === 'loose') {
+        itemTargets[index] = { kind: 'loose' };
+      } else if (value.startsWith('existing:')) {
+        itemTargets[index] = { kind: 'existing', containerId: parseInt(value.split(':')[1]) };
+      } else if (value.startsWith('proposed:')) {
+        itemTargets[index] = { kind: 'proposed', name: value.slice('proposed:'.length) };
+      }
+      return { ...s, itemTargets };
+    }));
   };
 
   const filteredItems = selectedContainer
@@ -280,7 +367,7 @@ export default function RoomView() {
   }
 
   return (
-    <div className="space-y-6 animate-rise">
+    <div className="space-y-6 animate-rise min-w-0 max-w-full">
       {/* Room header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="min-w-0">
@@ -357,7 +444,7 @@ export default function RoomView() {
             <div className="space-y-2">
               <p className="eyebrow">Ready to review · {ready.length}</p>
               {ready.map(s => (
-                <div key={s.sessionId} className="card flex items-center gap-3 py-3">
+                <div key={s.sessionId} className="card flex flex-wrap items-center gap-3 py-3">
                   <Thumb url={s.imageUrl} />
                   <div className="flex-1 min-w-0">
                     <p className="text-surface-100 font-medium">
@@ -367,8 +454,10 @@ export default function RoomView() {
                       {s.result?.proposed_containers.length || 0} {s.result?.proposed_containers.length === 1 ? 'container' : 'containers'}
                     </p>
                   </div>
-                  <button onClick={() => setReviewingScanId(s.sessionId)} className="btn-primary">Review</button>
-                  <button onClick={() => removeScan(s.sessionId)} className="btn-secondary">Discard</button>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <button onClick={() => setReviewingScanId(s.sessionId)} className="btn-primary flex-1 sm:flex-none">Review</button>
+                    <button onClick={() => removeScan(s.sessionId)} className="btn-secondary flex-1 sm:flex-none">Discard</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -378,10 +467,10 @@ export default function RoomView() {
           {failed.length > 0 && (
             <div className="space-y-2">
               {failed.map(s => (
-                <div key={s.sessionId} className="card border-red-900 bg-red-950/30 flex items-center gap-3 py-3">
+                <div key={s.sessionId} className="card border-red-900 bg-red-950/30 flex flex-wrap items-center gap-3 py-3">
                   <Thumb url={s.imageUrl} />
-                  <p className="text-red-400 text-sm flex-1">Couldn't scan that photo. {s.error}</p>
-                  <button onClick={() => removeScan(s.sessionId)} className="btn-secondary">Dismiss</button>
+                  <p className="text-red-400 text-sm flex-1 min-w-0">Couldn't scan that photo. {s.error}</p>
+                  <button onClick={() => removeScan(s.sessionId)} className="btn-secondary w-full sm:w-auto">Dismiss</button>
                 </div>
               ))}
             </div>
@@ -426,10 +515,10 @@ export default function RoomView() {
               </div>
             )}
 
-            {/* Proposed containers */}
+            {/* New containers to be created (existing ones are filed via the per-item selector) */}
             {reviewingScan.result?.proposed_containers.length > 0 && (
               <div className="mb-6">
-                <p className="eyebrow mb-2">Proposed containers · {reviewingScan.result.proposed_containers.length}</p>
+                <p className="eyebrow mb-2">New containers · {reviewingScan.result.proposed_containers.length}</p>
                 <div className="space-y-2">
                   {reviewingScan.result.proposed_containers.map((container, i) => (
                     <div key={i} className="card flex items-center gap-3 py-3">
@@ -483,6 +572,41 @@ export default function RoomView() {
                         <span className="badge-low">Low confidence</span>
                       )}
                     </div>
+                    {/* Per-item destination selector — reuse existing containers
+                        before creating new ones. Defaults from the AI's
+                        suggested_container; user can override each. */}
+                    {reviewingScan.existingContainers && (() => {
+                      const target = reviewingScan.itemTargets?.[i] || { kind: 'loose' };
+                      let selectValue = 'loose';
+                      if (target.kind === 'existing') selectValue = `existing:${target.containerId}`;
+                      else if (target.kind === 'proposed') selectValue = `proposed:${target.name}`;
+                      return (
+                        <div className="flex items-center gap-2 mt-2 pl-9">
+                          <span className="font-mono text-[0.62rem] uppercase tracking-wider text-surface-500">File in</span>
+                          <select
+                            value={selectValue}
+                            onChange={(e) => handleItemTargetChange(i, e.target.value)}
+                            className="input-field text-sm py-1 flex-1 min-w-0"
+                          >
+                            <option value="loose">Loose in room</option>
+                            {reviewingScan.existingContainers.length > 0 && (
+                              <optgroup label="Existing">
+                                {reviewingScan.existingContainers.map(c => (
+                                  <option key={c.id} value={`existing:${c.id}`}>{c.name}</option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {(reviewingScan.result?.proposed_containers || []).length > 0 && (
+                              <optgroup label="New containers">
+                                {reviewingScan.result.proposed_containers.map(c => (
+                                  <option key={c.name} value={`proposed:${c.name}`}>{c.name} (new)</option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -510,7 +634,8 @@ export default function RoomView() {
 
       {/* Filters */}
       {(containers.length > 0 || categories.length > 0) && (
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="min-w-0 max-w-full overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-6 sm:px-6">
+          <div className="flex gap-2 w-max max-w-none">
           <button
             onClick={() => { setSelectedContainer(null); setFilterCategory(null); }}
             className={`${chipBase} ${!selectedContainer && !filterCategory ? chipOn : chipOff}`}
@@ -535,18 +660,20 @@ export default function RoomView() {
               {category}
             </button>
           ))}
+          </div>
         </div>
       )}
 
       {/* Container tree */}
       {containers.length > 0 && (
-        <div className="card">
+        <div className="card min-w-0 overflow-hidden">
           <p className="eyebrow mb-2">Containers</p>
           <ContainerTree
             containers={containers}
             roomId={roomId}
             selectedId={selectedContainer}
             onSelect={(id) => { setFilterCategory(null); setSelectedContainer(selectedContainer === id ? null : id); }}
+            onMoved={loadData}
           />
         </div>
       )}
@@ -576,16 +703,50 @@ export default function RoomView() {
           )}
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredItems.map(item => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              onUpdate={(updates) => itemsApi.update(item.id, updates).then(loadData)}
-              onDelete={() => itemsApi.delete(item.id).then(loadData)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid gap-3 min-w-0 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredItems.map(item => (
+              <ItemCard
+                key={item.id}
+                item={item}
+                selected={selectedItemIds.has(item.id)}
+                onToggleSelect={toggleSelectItem}
+                onMove={handleMoveSingleItem}
+                onUpdate={(updates) => itemsApi.update(item.id, updates).then(loadData)}
+                onDelete={() => itemsApi.delete(item.id).then(loadData)}
+              />
+            ))}
+          </div>
+
+          {/* Multi-select action bar */}
+          {selectedItemIds.size > 0 && (
+            <div className="sticky bottom-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-surface-950/90 backdrop-blur-sm border-t border-surface-800 flex items-center justify-between gap-3 safe-bottom">
+              <span className="text-sm text-surface-300">
+                {selectedItemIds.size} {selectedItemIds.size === 1 ? 'item' : 'items'} selected
+              </span>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedItemIds(new Set())} className="btn-secondary text-sm">Clear</button>
+                <button onClick={handleMoveSelectedItems} className="btn-primary text-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m0 0l-3-3m3 3l-3 3" />
+                  </svg>
+                  Move {selectedItemIds.size} {selectedItemIds.size === 1 ? 'item' : 'items'}
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Item-move picker (multi-select or single) */}
+      {movingItems && (
+        <MovePicker
+          sourceRoomId={parseInt(roomId)}
+          mode="item"
+          itemIds={movingItems}
+          onDone={() => { setSelectedItemIds(new Set()); loadData(); }}
+          onClose={() => setMovingItems(null)}
+        />
       )}
     </div>
   );

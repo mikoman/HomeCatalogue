@@ -55,20 +55,44 @@ JSON_SCHEMA = {
 }
 
 
-async def process_image_with_ai(image_path: str, room_id: int) -> ScanResult:
-    """Process an uploaded image through the configured AI vision model."""
+async def process_image_with_ai(image_path: str, room_id: int, existing_containers: list[dict] | None = None) -> ScanResult:
+    """Process an uploaded image through the configured AI vision model.
+
+    `existing_containers` is an optional list of {"name", "description"} dicts
+    describing the room's existing containers. When provided, the AI is told to
+    reuse those (by setting suggested_container to the existing name) instead
+    of re-proposing them in proposed_containers.
+    """
     provider = settings.ai_provider.lower()
+    system_prompt = _build_system_prompt(existing_containers)
 
     if provider == "openai":
-        return await _process_openai(image_path)
+        return await _process_openai(image_path, system_prompt)
     elif provider == "anthropic":
-        return await _process_anthropic(image_path)
+        return await _process_anthropic(image_path, system_prompt)
     elif provider == "ollama":
-        return await _process_ollama(image_path)
+        return await _process_ollama(image_path, system_prompt)
     elif provider == "omlx":
-        return await _process_omlx(image_path)
+        return await _process_omlx(image_path, system_prompt)
     else:
         raise ValueError(f"Unsupported AI provider: {provider}")
+
+
+def _build_system_prompt(existing_containers: list[dict] | None) -> str:
+    """Compose the base system prompt with existing-container context."""
+    prompt = SYSTEM_PROMPT
+    if existing_containers:
+        names = ", ".join(f"'{c['name']}'" for c in existing_containers)
+        prompt = (
+            prompt
+            + "\n\n"
+            + "The room already contains these containers: "
+            + names
+            + ". When an item belongs in one of these, set its suggested_container to that "
+            "exact name and do NOT re-propose it in proposed_containers. Only add a container "
+            "to proposed_containers if none of the existing ones fit."
+        )
+    return prompt
 
 
 def _encode_image(image_path: str) -> str:
@@ -77,7 +101,7 @@ def _encode_image(image_path: str) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-async def _process_openai(image_path: str) -> ScanResult:
+async def _process_openai(image_path: str, system_prompt: str) -> ScanResult:
     """Process image using OpenAI GPT-4o with structured outputs."""
     from openai import OpenAI
 
@@ -87,7 +111,7 @@ async def _process_openai(image_path: str) -> ScanResult:
     response = client.chat.completions.create(
         model=settings.openai_model,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": [
@@ -111,7 +135,7 @@ async def _process_openai(image_path: str) -> ScanResult:
     return _parse_scan_result(content)
 
 
-async def _process_anthropic(image_path: str) -> ScanResult:
+async def _process_anthropic(image_path: str, system_prompt: str) -> ScanResult:
     """Process image using Anthropic Claude with structured outputs."""
     import anthropic
 
@@ -121,7 +145,7 @@ async def _process_anthropic(image_path: str) -> ScanResult:
     response = client.messages.create(
         model=settings.anthropic_model,
         max_tokens=4096,
-        system=SYSTEM_PROMPT,
+        system=system_prompt,
         messages=[
             {
                 "role": "user",
@@ -159,7 +183,7 @@ async def _process_anthropic(image_path: str) -> ScanResult:
     raise ValueError("No tool use response from Anthropic")
 
 
-async def _process_ollama(image_path: str) -> ScanResult:
+async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
     """Process image using a local Ollama vision model (e.g. llava, qwen3-vl)."""
     import httpx
 
@@ -182,7 +206,7 @@ async def _process_ollama(image_path: str) -> ScanResult:
             json={
                 "model": settings.ollama_model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {
                         "role": "user",
                         "content": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
@@ -199,7 +223,7 @@ async def _process_ollama(image_path: str) -> ScanResult:
     return _parse_scan_result(content)
 
 
-async def _process_omlx(image_path: str) -> ScanResult:
+async def _process_omlx(image_path: str, system_prompt: str) -> ScanResult:
     """Process image via an oMLX server (OpenAI-compatible API, runs on the host).
 
     The backend runs in Docker, so OMLX_BASE_URL must point at the host
@@ -220,7 +244,7 @@ async def _process_omlx(image_path: str) -> ScanResult:
             json={
                 "model": settings.omlx_model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {
                         "role": "user",
                         "content": [

@@ -18,6 +18,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFi
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, get_db
+from app.models.container import Container
 from app.models.item import Item
 from app.models.room import Room
 from app.models.scan_session import ScanSession
@@ -77,7 +78,8 @@ async def _run_scan(scan_session_id: str, image_path: str, room_id: int) -> None
     _set_status(scan_session_id, status="processing")
 
     try:
-        result = await process_image_with_ai(image_path, room_id)
+        existing_containers = _fetch_existing_containers(room_id)
+        result = await process_image_with_ai(image_path, room_id, existing_containers=existing_containers)
         _set_status(
             scan_session_id,
             status="completed",
@@ -114,6 +116,26 @@ def _set_status(
         if completed_at is not None:
             sess.completed_at = completed_at
         db.commit()
+    finally:
+        db.close()
+
+
+def _fetch_existing_containers(room_id: int) -> list[dict]:
+    """Snapshot of the room's existing containers at scan-creation time.
+
+    Captured once (when the scan starts running) so mid-scan container
+    additions don't race the AI prompt. Returns a list of {name, description}
+    dicts for the AI context.
+    """
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(Container)
+            .filter(Container.room_id == room_id)
+            .order_by(Container.name)
+            .all()
+        )
+        return [{"name": c.name, "description": c.description or ""} for c in rows]
     finally:
         db.close()
 

@@ -15,7 +15,7 @@ export default function Layout({ children, houses, setHouses }) {
     'CATALOGUE';
 
   return (
-    <div className="min-h-screen bg-surface-950 flex">
+    <div className="min-h-screen bg-surface-950 flex overflow-x-hidden">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -33,7 +33,7 @@ export default function Layout({ children, houses, setHouses }) {
       />
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen lg:ml-64">
         {/* Top bar */}
         <header className="safe-top sticky top-0 z-30 bg-surface-950/85 backdrop-blur-xl border-b border-surface-800">
           {/* hazard hairline */}
@@ -59,8 +59,8 @@ export default function Layout({ children, houses, setHouses }) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-7">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="max-w-5xl mx-auto w-full min-w-0 px-4 sm:px-6 py-7">
             {children}
           </div>
         </main>

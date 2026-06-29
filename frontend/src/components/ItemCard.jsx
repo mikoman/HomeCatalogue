@@ -1,10 +1,11 @@
 import { useState } from 'react';
 
-export default function ItemCard({ item, onUpdate, onDelete }) {
+export default function ItemCard({ item, onUpdate, onDelete, onMove, selected, onToggleSelect }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(item.name);
   const [editCategory, setEditCategory] = useState(item.category || '');
   const [showDelete, setShowDelete] = useState(false);
+  const selectable = typeof onToggleSelect === 'function';
 
   const handleSave = async () => {
     if (!editName.trim()) return;
@@ -59,12 +60,26 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
   }
 
   return (
-    <div className="card group hover:border-surface-600 transition-all">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <span className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
-            #{String(item.id).padStart(4, '0')}
-          </span>
+    <div
+      className={`card group hover:border-surface-600 transition-all min-w-0 overflow-hidden ${selected ? 'border-primary-500 ring-1 ring-primary-500/40' : ''}`}
+      onClick={selectable ? () => onToggleSelect(item.id) : undefined}
+    >
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="flex-1 min-w-0 flex items-start gap-2">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect(item.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="mt-1 w-4 h-4 rounded border-surface-600 bg-surface-900 accent-primary-500 flex-shrink-0"
+              aria-label={`Select ${item.name}`}
+            />
+          )}
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
+              #{String(item.id).padStart(4, '0')}
+            </span>
           <h3 className="text-surface-100 font-medium truncate mt-0.5">{item.name}</h3>
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
             {item.category && <span className="tag">{item.category}</span>}
@@ -85,8 +100,9 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
               {new Date(item.date_added).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })}
             </p>
           )}
+          </div>
         </div>
-        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex flex-col gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => setIsEditing(true)}
             className="p-1.5 text-surface-500 hover:text-primary-400 transition-colors"
@@ -105,12 +121,23 @@ export default function ItemCard({ item, onUpdate, onDelete }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
+          {onMove && (
+            <button
+              onClick={(e) => onMove(item.id, e)}
+              className="p-1.5 text-surface-500 hover:text-primary-400 transition-colors"
+              aria-label={`Move ${item.name}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m0 0l-3-3m3 3l-3 3" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Delete confirmation */}
       {showDelete && (
-        <div className="mt-3 pt-3 border-t border-surface-800">
+        <div className="mt-3 pt-3 border-t border-surface-800" onClick={(e) => e.stopPropagation()}>
           <p className="text-sm text-surface-400 mb-2">Delete this item?</p>
           <div className="flex gap-2">
             <button onClick={handleDelete} className="btn-danger text-xs px-3 py-1.5">Delete</button>
