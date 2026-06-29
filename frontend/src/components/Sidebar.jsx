@@ -2,6 +2,26 @@ import { Link, NavLink } from 'react-router-dom';
 import { useState } from 'react';
 import { houses as housesApi, rooms as roomsApi } from '../api/client';
 
+function SettingsLink({ onClose, className = '' }) {
+  return (
+    <NavLink
+      to="/settings"
+      onClick={() => onClose?.()}
+      className={({ isActive }) => `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${className} ${
+        isActive
+          ? 'bg-surface-800 text-primary-400'
+          : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
+      }`}
+    >
+      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+      Settings
+    </NavLink>
+  );
+}
+
 export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
   const [expandedHouses, setExpandedHouses] = useState({});
   const [rooms, setRooms] = useState({});
@@ -82,13 +102,13 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
   return (
     <>
       <aside className={`
-        fixed lg:sticky top-0 left-0 z-50 h-screen w-64 bg-surface-900 border-r border-surface-800
+        fixed lg:fixed top-0 left-0 z-50 h-dvh max-h-dvh w-64 bg-surface-900 border-r border-surface-800
         transform transition-transform duration-200 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-        flex flex-col safe-top
+        flex flex-col min-h-0 safe-top safe-bottom
       `}>
         {/* Brand */}
-        <div className="p-4 border-b border-surface-800">
+        <div className="flex-shrink-0 p-4 border-b border-surface-800">
           <Link to="/houses" onClick={onClose} className="flex items-center gap-3 group">
             <span className="w-9 h-9 rounded-md bg-primary-500 grid place-items-center flex-shrink-0
                              shadow-sm group-hover:shadow-glow transition-shadow">
@@ -103,8 +123,13 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
           </Link>
         </div>
 
-        {/* Houses list */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        {/* Settings — top of sidebar on mobile so it stays reachable */}
+        <div className="flex-shrink-0 px-3 pt-2 pb-3 border-b border-surface-800 lg:hidden">
+          <SettingsLink onClose={onClose} />
+        </div>
+
+        {/* Houses list — scrolls independently; footer stays pinned */}
+        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-1">
           <p className="eyebrow px-3 pb-2 pt-1">Properties</p>
           {houses.map(house => (
             <div key={house.id} className="group/house rounded-md overflow-hidden">
@@ -223,9 +248,12 @@ export default function Sidebar({ houses, setHouses, isOpen, onClose }) {
           )}
         </nav>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-surface-800">
-          <p className="font-mono text-[0.62rem] text-surface-600 tracking-wider">
+        {/* Footer — always visible on desktop */}
+        <div className="flex-shrink-0 px-3 py-3 border-t border-surface-800 bg-surface-900 space-y-1">
+          <div className="hidden lg:block">
+            <SettingsLink onClose={onClose} />
+          </div>
+          <p className="font-mono text-[0.62rem] text-surface-600 tracking-wider px-3 pt-1">
             {houses.length} {houses.length === 1 ? 'PROPERTY' : 'PROPERTIES'} ON FILE
           </p>
         </div>

@@ -6,6 +6,7 @@ import HouseList from './components/HouseList';
 import HouseDetail from './components/HouseDetail';
 import RoomView from './components/RoomView';
 import ReviewScan from './components/ReviewScan';
+import Settings from './components/Settings';
 
 export default function App() {
   const [housesList, setHousesList] = useState([]);
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/houses/:houseId" element={<HouseDetail />} />
         <Route path="/rooms/:roomId" element={<RoomView />} />
         <Route path="/review-scan" element={<ReviewScan />} />
+        <Route path="/settings" element={<Settings />} />
       </Routes>
     </Layout>
   );

@@ -104,3 +104,19 @@ export const scan = {
   getStatus: (sessionId) => request(`/scan/${sessionId}`),
   getPending: (sessionId) => request(`/scan/pending/${sessionId}`),
 };
+
+// AI settings
+export const aiSettings = {
+  get: () => request('/settings/ai'),
+  update: (data) => request('/settings/ai', { method: 'PUT', body: JSON.stringify(data) }),
+  listModels: (provider, baseUrl) => {
+    const params = new URLSearchParams({ provider });
+    if (baseUrl) params.set('base_url', baseUrl);
+    return request(`/settings/ai/models?${params.toString()}`);
+  },
+  testConnection: (provider, baseUrl) => {
+    const params = new URLSearchParams({ provider });
+    if (baseUrl) params.set('base_url', baseUrl);
+    return request(`/settings/ai/test?${params.toString()}`);
+  },
+};

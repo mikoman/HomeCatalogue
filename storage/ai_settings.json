@@ -1,0 +1,7 @@
+{
+  "provider": "lmstudio",
+  "ollama_base_url": "http://host.docker.internal:11434",
+  "ollama_model": "qwen3-vl:8b",
+  "lmstudio_base_url": "http://host.docker.internal:1234/v1",
+  "lmstudio_model": "qwen/qwen3-vl-8b"
+}

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
     ollama_base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llava")
+    lmstudio_base_url: str = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+    lmstudio_model: str = os.getenv("LMSTUDIO_MODEL", "")
     omlx_model: str = os.getenv("OMLX_MODEL", "mlx-community/llava-1.5-7b-4bit")
     # oMLX runs on the host; from inside Docker reach it via host.docker.internal
     omlx_base_url: str = os.getenv("OMLX_BASE_URL", "http://host.docker.internal:8000/v1")

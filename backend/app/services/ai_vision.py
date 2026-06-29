@@ -4,6 +4,7 @@ import json
 import base64
 from pathlib import Path
 from app.config import settings
+from app.services.ai_settings_store import get_effective_ai_config
 from app.schemas.scan import ScanResult, AIItem, AIContainer
 
 
@@ -63,7 +64,7 @@ async def process_image_with_ai(image_path: str, room_id: int, existing_containe
     reuse those (by setting suggested_container to the existing name) instead
     of re-proposing them in proposed_containers.
     """
-    provider = settings.ai_provider.lower()
+    provider = get_effective_ai_config()["provider"].lower()
     system_prompt = _build_system_prompt(existing_containers)
 
     if provider == "openai":
@@ -72,6 +73,8 @@ async def process_image_with_ai(image_path: str, room_id: int, existing_containe
         return await _process_anthropic(image_path, system_prompt)
     elif provider == "ollama":
         return await _process_ollama(image_path, system_prompt)
+    elif provider == "lmstudio":
+        return await _process_lmstudio(image_path, system_prompt)
     elif provider == "omlx":
         return await _process_omlx(image_path, system_prompt)
     else:
@@ -188,7 +191,9 @@ async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
     import httpx
 
     image_b64 = _encode_image(image_path)
-    base_url = settings.ollama_base_url.rstrip("/")
+    ai = get_effective_ai_config()
+    base_url = ai["base_url"].rstrip("/")
+    model = ai["model"]
 
     # Pass the JSON schema as `format` (Ollama structured outputs) so the model
     # returns the exact shape _parse_scan_result expects, not just any valid JSON.
@@ -204,7 +209,7 @@ async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
         response = await client.post(
             f"{base_url}/api/chat",
             json={
-                "model": settings.ollama_model,
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {
@@ -223,26 +228,27 @@ async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
     return _parse_scan_result(content)
 
 
-async def _process_omlx(image_path: str, system_prompt: str) -> ScanResult:
-    """Process image via an oMLX server (OpenAI-compatible API, runs on the host).
-
-    The backend runs in Docker, so OMLX_BASE_URL must point at the host
-    (e.g. http://host.docker.internal:PORT/v1), not localhost.
-    """
+async def _process_openai_compatible(
+    image_path: str,
+    system_prompt: str,
+    *,
+    base_url: str,
+    model: str,
+    api_key: str = "",
+) -> ScanResult:
+    """Process image via an OpenAI-compatible API (LM Studio, oMLX, etc.)."""
     import httpx
 
     image_b64 = _encode_image(image_path)
-    base_url = settings.omlx_base_url.rstrip("/")
-    headers = {"Authorization": f"Bearer {settings.omlx_api_key}"} if settings.omlx_api_key else {}
+    base_url = base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
-    # See _process_ollama for the queue-depth rationale. Local OpenAI-compatible
-    # servers typically also serialize, so the same multi-scan queueing applies.
     async with httpx.AsyncClient(timeout=600.0) as client:
         response = await client.post(
             f"{base_url}/chat/completions",
             headers=headers,
             json={
-                "model": settings.omlx_model,
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {
@@ -265,6 +271,32 @@ async def _process_omlx(image_path: str, system_prompt: str) -> ScanResult:
     response.raise_for_status()
     content = response.json()["choices"][0]["message"]["content"]
     return _parse_scan_result(content)
+
+
+async def _process_lmstudio(image_path: str, system_prompt: str) -> ScanResult:
+    """Process image via LM Studio (OpenAI-compatible local server)."""
+    ai = get_effective_ai_config()
+    return await _process_openai_compatible(
+        image_path,
+        system_prompt,
+        base_url=ai["base_url"],
+        model=ai["model"],
+    )
+
+
+async def _process_omlx(image_path: str, system_prompt: str) -> ScanResult:
+    """Process image via an oMLX server (OpenAI-compatible API, runs on the host).
+
+    The backend runs in Docker, so OMLX_BASE_URL must point at the host
+    (e.g. http://host.docker.internal:PORT/v1), not localhost.
+    """
+    return await _process_openai_compatible(
+        image_path,
+        system_prompt,
+        base_url=settings.omlx_base_url,
+        model=settings.omlx_model,
+        api_key=settings.omlx_api_key,
+    )
 
 
 def _parse_scan_result(content: str) -> ScanResult:

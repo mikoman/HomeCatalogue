@@ -10,6 +10,9 @@ from sqlalchemy import text
 from app.database import engine, Base
 from app.config import settings
 from app.routers import houses, rooms, containers, items, scan
+from app.routers import settings as settings_router
+from app.services.ai_settings_store import get_effective_ai_config
+from app.runtime_env import running_in_docker
 
 
 @asynccontextmanager
@@ -43,6 +46,7 @@ app.include_router(rooms.router)
 app.include_router(containers.router)
 app.include_router(items.router)
 app.include_router(scan.router)
+app.include_router(settings_router.router)
 
 # Serve uploaded files
 app.mount("/api/storage", StaticFiles(directory=settings.upload_dir), name="storage")
@@ -51,7 +55,13 @@ app.mount("/api/storage", StaticFiles(directory=settings.upload_dir), name="stor
 @app.get("/api/health")
 def health_check():
     """Simple health check endpoint."""
-    return {"status": "healthy", "provider": settings.ai_provider}
+    ai = get_effective_ai_config()
+    return {
+        "status": "healthy",
+        "provider": ai["provider"],
+        "model": ai["model"],
+        "running_in_docker": running_in_docker(),
+    }
 
 
 # Serve the frontend in production
