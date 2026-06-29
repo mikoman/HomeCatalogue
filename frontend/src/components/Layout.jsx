@@ -13,6 +13,7 @@ export default function Layout({ children, houses, setHouses }) {
     location.pathname.startsWith('/rooms/') ? 'LOCATION' :
     location.pathname === '/review-scan' ? 'REVIEW' :
     location.pathname === '/settings' ? 'SETTINGS' :
+    location.pathname === '/search' ? 'SEARCH' :
     'CATALOGUE';
 
   return (

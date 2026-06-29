@@ -56,35 +56,79 @@ JSON_SCHEMA = {
 }
 
 
-async def process_image_with_ai(image_path: str, room_id: int, existing_containers: list[dict] | None = None) -> ScanResult:
+DEFAULT_USER_PROMPT = (
+    "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. "
+    "Follow the schema strictly."
+)
+
+
+def _build_user_prompt(target_container: dict | None) -> str:
+    if not target_container:
+        return DEFAULT_USER_PROMPT
+    name = target_container["name"]
+    return (
+        f"This photo shows the inside of the container \"{name}\". "
+        f"Identify every item visible inside this container only. "
+        f"Set suggested_container to \"{name}\" for each item. "
+        f"Return a JSON object with 'proposed_containers' and 'items' arrays. "
+        f"Keep proposed_containers empty unless you see a clearly distinct sub-container. "
+        f"Follow the schema strictly."
+    )
+
+
+async def process_image_with_ai(
+    image_path: str,
+    room_id: int,
+    existing_containers: list[dict] | None = None,
+    target_container: dict | None = None,
+) -> ScanResult:
     """Process an uploaded image through the configured AI vision model.
 
     `existing_containers` is an optional list of {"name", "description"} dicts
     describing the room's existing containers. When provided, the AI is told to
     reuse those (by setting suggested_container to the existing name) instead
     of re-proposing them in proposed_containers.
+
+    `target_container` is set when the photo is a close-up of a specific
+    container's contents — the prompt focuses on items inside that container.
     """
     provider = get_effective_ai_config()["provider"].lower()
-    system_prompt = _build_system_prompt(existing_containers)
+    system_prompt = _build_system_prompt(existing_containers, target_container)
+    user_prompt = _build_user_prompt(target_container)
 
     if provider == "openai":
-        return await _process_openai(image_path, system_prompt)
+        return await _process_openai(image_path, system_prompt, user_prompt)
     elif provider == "anthropic":
-        return await _process_anthropic(image_path, system_prompt)
+        return await _process_anthropic(image_path, system_prompt, user_prompt)
     elif provider == "ollama":
-        return await _process_ollama(image_path, system_prompt)
+        return await _process_ollama(image_path, system_prompt, user_prompt)
     elif provider == "lmstudio":
-        return await _process_lmstudio(image_path, system_prompt)
+        return await _process_lmstudio(image_path, system_prompt, user_prompt)
     elif provider == "omlx":
-        return await _process_omlx(image_path, system_prompt)
+        return await _process_omlx(image_path, system_prompt, user_prompt)
     else:
         raise ValueError(f"Unsupported AI provider: {provider}")
 
 
-def _build_system_prompt(existing_containers: list[dict] | None) -> str:
+def _build_system_prompt(
+    existing_containers: list[dict] | None,
+    target_container: dict | None = None,
+) -> str:
     """Compose the base system prompt with existing-container context."""
     prompt = SYSTEM_PROMPT
-    if existing_containers:
+    if target_container:
+        name = target_container["name"]
+        prompt = (
+            prompt
+            + "\n\n"
+            + f"CONTAINER SCAN: The image is a photo taken inside the container \"{name}\". "
+            f"Catalog only the items physically inside this container. "
+            f"Do not propose \"{name}\" as a new container — it already exists. "
+            f"Set suggested_container to \"{name}\" for every item you find. "
+            f"Leave proposed_containers empty unless a clearly separate nested "
+            f"container is visible inside \"{name}\"."
+        )
+    elif existing_containers:
         names = ", ".join(f"'{c['name']}'" for c in existing_containers)
         prompt = (
             prompt
@@ -104,7 +148,7 @@ def _encode_image(image_path: str) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-async def _process_openai(image_path: str, system_prompt: str) -> ScanResult:
+async def _process_openai(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Process image using OpenAI GPT-4o with structured outputs."""
     from openai import OpenAI
 
@@ -124,7 +168,7 @@ async def _process_openai(image_path: str, system_prompt: str) -> ScanResult:
                     },
                     {
                         "type": "text",
-                        "text": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
+                        "text": user_prompt,
                     },
                 ],
             },
@@ -138,7 +182,7 @@ async def _process_openai(image_path: str, system_prompt: str) -> ScanResult:
     return _parse_scan_result(content)
 
 
-async def _process_anthropic(image_path: str, system_prompt: str) -> ScanResult:
+async def _process_anthropic(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Process image using Anthropic Claude with structured outputs."""
     import anthropic
 
@@ -163,7 +207,7 @@ async def _process_anthropic(image_path: str, system_prompt: str) -> ScanResult:
                     },
                     {
                         "type": "text",
-                        "text": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
+                        "text": user_prompt,
                     },
                 ],
             },
@@ -186,7 +230,7 @@ async def _process_anthropic(image_path: str, system_prompt: str) -> ScanResult:
     raise ValueError("No tool use response from Anthropic")
 
 
-async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
+async def _process_ollama(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Process image using a local Ollama vision model (e.g. llava, qwen3-vl)."""
     import httpx
 
@@ -214,7 +258,7 @@ async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
                     {"role": "system", "content": system_prompt},
                     {
                         "role": "user",
-                        "content": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
+                        "content": user_prompt,
                         "images": [image_b64],
                     },
                 ],
@@ -231,6 +275,7 @@ async def _process_ollama(image_path: str, system_prompt: str) -> ScanResult:
 async def _process_openai_compatible(
     image_path: str,
     system_prompt: str,
+    user_prompt: str,
     *,
     base_url: str,
     model: str,
@@ -260,7 +305,7 @@ async def _process_openai_compatible(
                             },
                             {
                                 "type": "text",
-                                "text": "Analyze this image and return a JSON object with 'proposed_containers' and 'items' arrays. Follow the schema strictly.",
+                                "text": user_prompt,
                             },
                         ],
                     },
@@ -273,18 +318,19 @@ async def _process_openai_compatible(
     return _parse_scan_result(content)
 
 
-async def _process_lmstudio(image_path: str, system_prompt: str) -> ScanResult:
+async def _process_lmstudio(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Process image via LM Studio (OpenAI-compatible local server)."""
     ai = get_effective_ai_config()
     return await _process_openai_compatible(
         image_path,
         system_prompt,
+        user_prompt,
         base_url=ai["base_url"],
         model=ai["model"],
     )
 
 
-async def _process_omlx(image_path: str, system_prompt: str) -> ScanResult:
+async def _process_omlx(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Process image via an oMLX server (OpenAI-compatible API, runs on the host).
 
     The backend runs in Docker, so OMLX_BASE_URL must point at the host
@@ -293,6 +339,7 @@ async def _process_omlx(image_path: str, system_prompt: str) -> ScanResult:
     return await _process_openai_compatible(
         image_path,
         system_prompt,
+        user_prompt,
         base_url=settings.omlx_base_url,
         model=settings.omlx_model,
         api_key=settings.omlx_api_key,

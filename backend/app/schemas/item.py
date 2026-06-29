@@ -57,3 +57,19 @@ class ItemMove(BaseModel):
     item_ids: list[int]
     room_id: int
     container_id: int | None = None
+
+
+class ItemSearchResult(BaseModel):
+    id: int
+    name: str
+    category: str | None
+    tags: list[str]
+    room_id: int
+    room_name: str
+    house_id: int
+    house_name: str
+    container_id: int | None
+    container_name: str | None
+    confidence_score: float | None
+
+    model_config = {"from_attributes": True}

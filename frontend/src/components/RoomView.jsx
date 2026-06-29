@@ -56,6 +56,7 @@ export default function RoomView() {
   const [filterCategory, setFilterCategory] = useState(null);
   const [selectedItemIds, setSelectedItemIds] = useState(new Set());  // multi-select for item moves
   const [movingItems, setMovingItems] = useState(null);               // number[] when item-move picker is open
+  const [pendingScanContainerId, setPendingScanContainerId] = useState(null);
 
   // Derived queue buckets
   const inFlight = scans.filter(s => s.status === 'pending' || s.status === 'processing');
@@ -144,7 +145,7 @@ export default function RoomView() {
       const [roomData, itemsData, containersData] = await Promise.all([
         roomsApi.get(roomId),
         itemsApi.list({ room_id: roomId }),
-        containersApi.list(roomId),
+        containersApi.list(roomId, null, { includeAll: true }),
       ]);
       setRoom(roomData);
       setItems(itemsData);
@@ -158,14 +159,19 @@ export default function RoomView() {
 
   // Take a photo and enqueue a scan. The button is never disabled, so you can
   // fire off several photos in a row — each becomes its own background scan.
-  const handleScan = async (file) => {
+  const handleScan = async (file, containerId = null) => {
     setScanError(null);
+    const targetContainerId = containerId ?? pendingScanContainerId;
+    setPendingScanContainerId(null);
     try {
       const compressed = await compressImage(file, { maxWidth: 1280, quality: 0.7 });
       const previewUrl = URL.createObjectURL(compressed);
-      // Upload returns immediately with a session id; inference runs on the
-      // backend. This is what keeps long Ollama runs from ever blocking the UI.
-      const { scan_session_id } = await scan.upload(roomId, compressed);
+      const targetContainer = targetContainerId
+        ? containers.find(c => c.id === targetContainerId)
+        : null;
+      const { scan_session_id } = await scan.upload(roomId, compressed, {
+        containerId: targetContainerId,
+      });
       setScans(prev => [...prev, {
         sessionId: scan_session_id,
         status: 'pending',
@@ -173,11 +179,18 @@ export default function RoomView() {
         result: null,
         error: null,
         startedAt: Date.now(),
+        containerId: targetContainerId ?? null,
+        containerName: targetContainer?.name ?? null,
       }]);
       startPolling(scan_session_id);
     } catch (err) {
       setScanError(err.message);
     }
+  };
+
+  const openContainerScan = (containerId) => {
+    setPendingScanContainerId(containerId);
+    fileInputRef.current?.click();
   };
 
   const handleFileChange = async (e) => {
@@ -308,6 +321,9 @@ export default function RoomView() {
         existing.forEach(c => { nameToId[c.name.toLowerCase()] = c.id; });
         const proposedNames = (scan.result.proposed_containers || []).map(c => c.name.toLowerCase());
         const itemTargets = scan.result.items.map(item => {
+          if (scan.containerId) {
+            return { kind: 'existing', containerId: scan.containerId };
+          }
           const sc = item.suggested_container;
           if (sc && nameToId[sc.toLowerCase()] != null) {
             return { kind: 'existing', containerId: nameToId[sc.toLowerCase()] };
@@ -350,6 +366,10 @@ export default function RoomView() {
       : items;
 
   const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
+  const selectedContainerRecord = selectedContainer
+    ? containers.find(c => c.id === selectedContainer)
+    : null;
+  const isEmptyContainerView = selectedContainer && filteredItems.length === 0;
   const chipBase = 'font-mono text-[0.62rem] uppercase tracking-wider px-2.5 py-1 rounded-sm border transition-colors whitespace-nowrap';
   const chipOn = 'bg-primary-500 text-surface-950 border-primary-500';
   const chipOff = 'bg-surface-900 text-surface-400 border-surface-700 hover:border-surface-600';
@@ -498,6 +518,11 @@ export default function RoomView() {
               <div>
                 <p className="eyebrow">Review scan</p>
                 <h3 className="font-display text-2xl font-bold text-surface-100">Confirm the catalogue</h3>
+                {reviewingScan.containerName && (
+                  <p className="text-sm text-surface-400 mt-1">
+                    Items will be filed in <span className="text-primary-400">{reviewingScan.containerName}</span>
+                  </p>
+                )}
               </div>
               <button
                 onClick={() => setReviewingScanId(null)}
@@ -687,23 +712,43 @@ export default function RoomView() {
       {filteredItems.length === 0 ? (
         <div className="card text-center py-14">
           <div className="w-14 h-14 rounded-lg bg-surface-800 grid place-items-center mx-auto mb-4">
-            <svg className="w-7 h-7 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
+            {isEmptyContainerView ? (
+              <svg className="w-7 h-7 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            ) : (
+              <svg className="w-7 h-7 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            )}
           </div>
           <h3 className="font-display text-lg font-semibold text-surface-200 mb-1">
-            {items.length === 0 ? 'Nothing catalogued yet' : 'No items match this filter'}
+            {items.length === 0
+              ? 'Nothing catalogued yet'
+              : isEmptyContainerView
+                ? `${selectedContainerRecord?.name || 'This container'} is empty`
+                : 'No items match this filter'}
           </h3>
           <p className="text-surface-500 mb-5">
-            {items.length === 0 ? 'Point your camera at a shelf and let the AI do the filing.' : 'Try a different container or category.'}
+            {items.length === 0
+              ? 'Point your camera at a shelf and let the AI do the filing.'
+              : isEmptyContainerView
+                ? 'Photograph the inside of this container to catalogue what\'s in there.'
+                : 'Try a different container or category.'}
           </p>
-          {items.length === 0 && (
-            <button onClick={() => fileInputRef.current?.click()} className="btn-primary mx-auto">
+          {(items.length === 0 || isEmptyContainerView) && (
+            <button
+              onClick={() => isEmptyContainerView
+                ? openContainerScan(selectedContainer)
+                : fileInputRef.current?.click()}
+              className="btn-primary mx-auto"
+            >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              Scan area
+              {isEmptyContainerView ? 'Scan inside container' : 'Scan area'}
             </button>
           )}
         </div>

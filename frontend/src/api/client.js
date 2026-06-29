@@ -66,6 +66,7 @@ export const items = {
     const searchParams = new URLSearchParams(params).toString();
     return request(`/items/?${searchParams}`);
   },
+  search: (q) => request(`/items/search?q=${encodeURIComponent(q)}`),
   get: (id) => request(`/items/${id}`),
   create: (data) => request('/items/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -83,10 +84,11 @@ export const items = {
 // instantly (the AI inference runs in a backend background task). Poll
 // getStatus(sessionId) until status === 'completed' (or 'failed').
 export const scan = {
-  upload: async (roomId, file) => {
+  upload: async (roomId, file, { containerId = null } = {}) => {
     const formData = new FormData();
     formData.append('room_id', roomId);
     formData.append('image', file);
+    if (containerId != null) formData.append('container_id', containerId);
 
     const response = await fetch(`${API_BASE}/scan/upload`, {
       method: 'POST',

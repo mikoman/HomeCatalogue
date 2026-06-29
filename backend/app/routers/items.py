@@ -2,13 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 from typing import List, Optional
 from app.database import get_db
 from app.models.item import Item
 from app.models.room import Room
 from app.models.container import Container
-from app.schemas.item import ItemCreate, ItemUpdate, ItemRead, ItemBulkCreate, ItemMove
+from app.models.house import House
+from app.schemas.item import ItemCreate, ItemUpdate, ItemRead, ItemBulkCreate, ItemMove, ItemSearchResult
+from app.services.search import item_search_filter
 
 router = APIRouter(prefix="/api/items", tags=["items"])
 
@@ -29,15 +30,43 @@ def list_items(
     if category:
         query = query.filter(Item.category == category)
     if search:
-        search_pattern = f"%{search}%"
-        query = query.filter(
-            or_(
-                Item.name.ilike(search_pattern),
-                Item.category.ilike(search_pattern),
-                Item.tags.astext.contains(search),  # JSON array contains
-            )
-        )
+        query = query.filter(item_search_filter(search))
     return query.order_by(Item.name).all()
+
+
+@router.get("/search", response_model=List[ItemSearchResult])
+def search_items(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(100, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    """Search items across the catalogue with room/house/container context."""
+    rows = (
+        db.query(Item, Room, House, Container)
+        .join(Room, Item.room_id == Room.id)
+        .join(House, Room.house_id == House.id)
+        .outerjoin(Container, Item.container_id == Container.id)
+        .filter(item_search_filter(q))
+        .order_by(House.name, Room.name, Container.name.nulls_last(), Item.name)
+        .limit(limit)
+        .all()
+    )
+    return [
+        ItemSearchResult(
+            id=item.id,
+            name=item.name,
+            category=item.category,
+            tags=item.tags or [],
+            room_id=room.id,
+            room_name=room.name,
+            house_id=house.id,
+            house_name=house.name,
+            container_id=container.id if container else None,
+            container_name=container.name if container else None,
+            confidence_score=item.confidence_score,
+        )
+        for item, room, house, container in rows
+    ]
 
 
 @router.post("/", response_model=ItemRead, status_code=201)

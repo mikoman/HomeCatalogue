@@ -34,6 +34,7 @@ async def upload_and_scan(
     background_tasks: BackgroundTasks,
     room_id: int = Form(...),
     image: UploadFile = File(...),
+    container_id: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """Upload an image and enqueue async AI analysis.
@@ -44,6 +45,15 @@ async def upload_and_scan(
     # Validate room exists
     if not db.query(Room).filter(Room.id == room_id).first():
         raise HTTPException(status_code=404, detail="Room not found")
+
+    if container_id is not None:
+        container = (
+            db.query(Container)
+            .filter(Container.id == container_id, Container.room_id == room_id)
+            .first()
+        )
+        if not container:
+            raise HTTPException(status_code=400, detail="Invalid container for this room")
 
     # Save the uploaded image
     scan_session_id = str(uuid.uuid4())
@@ -62,12 +72,17 @@ async def upload_and_scan(
 
     # Run inference after the response is sent. The background task uses its
     # own DB session because the request's session is closed once we return.
-    background_tasks.add_task(_run_scan, scan_session_id, file_path, room_id)
+    background_tasks.add_task(_run_scan, scan_session_id, file_path, room_id, container_id)
 
     return ScanUploadResponse(scan_session_id=scan_session_id, status="pending")
 
 
-async def _run_scan(scan_session_id: str, image_path: str, room_id: int) -> None:
+async def _run_scan(
+    scan_session_id: str,
+    image_path: str,
+    room_id: int,
+    container_id: int | None = None,
+) -> None:
     """Background task: run AI inference and persist the result.
 
     Runs in the same event loop after the upload response is sent. Inference
@@ -79,7 +94,13 @@ async def _run_scan(scan_session_id: str, image_path: str, room_id: int) -> None
 
     try:
         existing_containers = _fetch_existing_containers(room_id)
-        result = await process_image_with_ai(image_path, room_id, existing_containers=existing_containers)
+        target_container = _fetch_target_container(room_id, container_id)
+        result = await process_image_with_ai(
+            image_path,
+            room_id,
+            existing_containers=existing_containers,
+            target_container=target_container,
+        )
         _set_status(
             scan_session_id,
             status="completed",
@@ -116,6 +137,24 @@ def _set_status(
         if completed_at is not None:
             sess.completed_at = completed_at
         db.commit()
+    finally:
+        db.close()
+
+
+def _fetch_target_container(room_id: int, container_id: int | None) -> dict | None:
+    """Return {name, description} when scanning inside a specific container."""
+    if container_id is None:
+        return None
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(Container)
+            .filter(Container.id == container_id, Container.room_id == room_id)
+            .first()
+        )
+        if not row:
+            return None
+        return {"name": row.name, "description": row.description or ""}
     finally:
         db.close()
 

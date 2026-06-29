@@ -1,8 +1,19 @@
 """Search service for fuzzy text matching across items."""
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, cast, Text
 from app.models.item import Item
+
+
+def item_search_filter(query: str):
+    """Match query against item text fields (SQLite-safe JSON tag search)."""
+    pattern = f"%{query}%"
+    return or_(
+        Item.name.ilike(pattern),
+        Item.category.ilike(pattern),
+        cast(Item.tags, Text).ilike(pattern),
+        Item.notes.ilike(pattern),
+    )
 
 
 def search_items(
@@ -16,7 +27,6 @@ def search_items(
     Search items with fuzzy matching across name, category, and tags.
     Supports filtering by room and container.
     """
-    search_pattern = f"%{query}%"
     sql_query = db.query(Item)
 
     if room_id:
@@ -25,14 +35,7 @@ def search_items(
         sql_query = sql_query.filter(Item.container_id == container_id)
 
     # Fuzzy search across multiple fields
-    sql_query = sql_query.filter(
-        or_(
-            Item.name.ilike(search_pattern),
-            Item.category.ilike(search_pattern),
-            Item.tags.astext.contains(query),  # JSON array search
-            Item.notes.ilike(search_pattern),
-        )
-    )
+    sql_query = sql_query.filter(item_search_filter(query))
 
     return sql_query.limit(limit).order_by(Item.name).all()
 
