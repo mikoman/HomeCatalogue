@@ -91,12 +91,34 @@ export default function HouseDetail() {
             {rooms.length} {rooms.length === 1 ? 'ROOM' : 'ROOMS'}
           </p>
         </div>
-        <button onClick={() => setShowCreateRoom(true)} className="btn-primary self-start sm:self-auto">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add room
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {rooms.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`/api/export?house_id=${houseId}&format=csv`}
+                download
+                className="btn-secondary text-sm"
+                title="Download catalogue as CSV (insurance, moving, backup)"
+              >
+                Export CSV
+              </a>
+              <a
+                href={`/api/export?house_id=${houseId}&format=json`}
+                download
+                className="btn-secondary text-sm"
+                title="Download catalogue as JSON (full backup)"
+              >
+                JSON
+              </a>
+            </div>
+          )}
+          <button onClick={() => setShowCreateRoom(true)} className="btn-primary">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add room
+          </button>
+        </div>
       </div>
 
       {rooms.length === 0 ? (

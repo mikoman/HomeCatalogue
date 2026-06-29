@@ -199,9 +199,18 @@ export default function SearchResults() {
                                     onClick={() => navigate(`/rooms/${item.room_id}`)}
                                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-surface-800 transition-colors text-left group"
                                   >
-                                    <span className="font-mono text-[0.62rem] text-surface-600 flex-shrink-0">
-                                      #{String(item.id).padStart(4, '0')}
-                                    </span>
+                                    {item.image_url ? (
+                                      <img
+                                        src={item.image_url}
+                                        alt=""
+                                        loading="lazy"
+                                        className="w-7 h-7 rounded object-cover border border-surface-800 flex-shrink-0"
+                                      />
+                                    ) : (
+                                      <span className="font-mono text-[0.62rem] text-surface-600 flex-shrink-0">
+                                        #{String(item.id).padStart(4, '0')}
+                                      </span>
+                                    )}
                                     <span className="text-sm text-surface-100 truncate flex-1">{item.name}</span>
                                     {item.category && (
                                       <span className="tag text-[0.65rem] py-0 px-1.5 flex-shrink-0">{item.category}</span>

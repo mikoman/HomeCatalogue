@@ -10,10 +10,13 @@ class AISettingsRead(BaseModel):
     provider: str
     base_url: str
     model: str
+    embedding_model: str = ""
     ollama_base_url: str
     ollama_model: str
+    ollama_embedding_model: str = ""
     lmstudio_base_url: str
     lmstudio_model: str
+    lmstudio_embedding_model: str = ""
     running_in_docker: bool
     suggested_urls: dict[str, str]
     suggested_urls_by_provider: dict[str, dict[str, str]]
@@ -23,6 +26,7 @@ class AISettingsUpdate(BaseModel):
     provider: str = Field(..., pattern="^(ollama|lmstudio)$")
     base_url: str
     model: str
+    embedding_model: str | None = None
 
 
 class AIModelInfo(BaseModel):

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import text
 from app.database import engine, Base
 from app.config import settings
-from app.routers import houses, rooms, containers, items, scan
+from app.routers import houses, rooms, containers, items, scan, export
 from app.routers import settings as settings_router
 from app.services.ai_settings_store import get_effective_ai_config
 from app.runtime_env import running_in_docker
@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
     """Create tables on startup if they don't exist."""
     Base.metadata.create_all(bind=engine)
     _migrate_scan_sessions()
+    _migrate_items()
     # Ensure upload directory exists
     os.makedirs(settings.upload_dir, exist_ok=True)
     yield
@@ -34,6 +35,15 @@ def _migrate_scan_sessions() -> None:
             conn.execute(
                 text("ALTER TABLE scan_sessions ADD COLUMN container_id INTEGER REFERENCES containers(id)")
             )
+
+
+def _migrate_items() -> None:
+    """Add the semantic-search embedding column to pre-existing item tables."""
+    with engine.begin() as conn:
+        rows = conn.execute(text("PRAGMA table_info(items)")).fetchall()
+        col_names = {row[1] for row in rows}
+        if rows and "embedding" not in col_names:
+            conn.execute(text("ALTER TABLE items ADD COLUMN embedding JSON"))
 
 
 app = FastAPI(
@@ -58,6 +68,7 @@ app.include_router(rooms.router)
 app.include_router(containers.router)
 app.include_router(items.router)
 app.include_router(scan.router)
+app.include_router(export.router)
 app.include_router(settings_router.router)
 
 # Serve uploaded files

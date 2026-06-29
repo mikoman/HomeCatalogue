@@ -97,18 +97,28 @@ async def process_image_with_ai(
     system_prompt = _build_system_prompt(existing_containers, target_container)
     user_prompt = _build_user_prompt(target_container)
 
-    if provider == "openai":
-        return await _process_openai(image_path, system_prompt, user_prompt)
-    elif provider == "anthropic":
-        return await _process_anthropic(image_path, system_prompt, user_prompt)
-    elif provider == "ollama":
-        return await _process_ollama(image_path, system_prompt, user_prompt)
-    elif provider == "lmstudio":
-        return await _process_lmstudio(image_path, system_prompt, user_prompt)
-    elif provider == "omlx":
-        return await _process_omlx(image_path, system_prompt, user_prompt)
-    else:
+    dispatch = {
+        "openai": _process_openai,
+        "anthropic": _process_anthropic,
+        "ollama": _process_ollama,
+        "lmstudio": _process_lmstudio,
+        "omlx": _process_omlx,
+    }.get(provider)
+    if dispatch is None:
         raise ValueError(f"Unsupported AI provider: {provider}")
+
+    try:
+        return await dispatch(image_path, system_prompt, user_prompt)
+    except ValueError:
+        # Parse failed (bad/no JSON) — give the model one more shot with a
+        # stricter nudge before the scan lands in the failed bin. Small local
+        # models often need the reminder; the image is just re-encoded.
+        repair_prompt = (
+            user_prompt
+            + "\n\nYour previous response was not valid JSON. Return ONLY the "
+            "JSON object matching the schema — no prose, no markdown fences."
+        )
+        return await dispatch(image_path, system_prompt, repair_prompt)
 
 
 def _build_system_prompt(
@@ -347,36 +357,61 @@ async def _process_omlx(image_path: str, system_prompt: str, user_prompt: str) -
     )
 
 
-def _parse_scan_result(content: str) -> ScanResult:
-    """Parse and validate the JSON response from the AI model."""
-    # Strip markdown code fences if present
+def _extract_json(content: str) -> dict:
+    """Pull a JSON object out of a model response, tolerating fences and prose."""
     content = content.strip()
+    # Strip a leading ```json / ``` fence and its closing fence.
     if content.startswith("```"):
-        lines = content.split("\n")
-        lines = lines[1:]  # Remove opening fence
+        lines = content.split("\n")[1:]
         if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]  # Remove closing fence
+            lines = lines[:-1]
         content = "\n".join(lines)
 
     try:
-        data = json.loads(content)
+        return json.loads(content)
     except json.JSONDecodeError:
-        raise ValueError(f"Invalid JSON from AI model: {content[:200]}...")
+        pass
 
-    # Build result with proper typing
-    containers = [
-        AIContainer(name=c["name"], description=c.get("description", ""))
-        for c in data.get("proposed_containers", [])
-    ]
-    items = [
-        AIItem(
-            name=i["name"],
-            category=i.get("category"),
-            tags=i.get("tags", []),
-            suggested_container=i.get("suggested_container"),
-            confidence_score=i.get("confidence_score", 1.0),
+    # Fall back to the substring between the first { and last } — local models
+    # often wrap the JSON in explanatory prose.
+    start, end = content.find("{"), content.rfind("}")
+    if start != -1 and end > start:
+        try:
+            return json.loads(content[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    raise ValueError(f"Invalid JSON from AI model: {content[:200]}...")
+
+
+def _parse_scan_result(content: str) -> ScanResult:
+    """Parse and validate the JSON response from the AI model.
+
+    Tolerant by design: skips entries missing a name rather than failing the
+    whole scan — a partial inventory beats a hard failure in the bin.
+    """
+    data = _extract_json(content)
+
+    containers = []
+    for c in data.get("proposed_containers") or []:
+        name = c.get("name")
+        if not name:
+            continue
+        containers.append(AIContainer(name=name, description=c.get("description", "")))
+
+    items = []
+    for i in data.get("items") or []:
+        name = i.get("name")
+        if not name:
+            continue
+        items.append(
+            AIItem(
+                name=name,
+                category=i.get("category"),
+                tags=i.get("tags", []),
+                suggested_container=i.get("suggested_container"),
+                confidence_score=i.get("confidence_score", 1.0),
+            )
         )
-        for i in data.get("items", [])
-    ]
 
     return ScanResult(proposed_containers=containers, items=items)

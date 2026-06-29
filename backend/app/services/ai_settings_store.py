@@ -29,6 +29,9 @@ def _defaults() -> dict:
         "ollama_model": settings.ollama_model,
         "lmstudio_base_url": settings.lmstudio_base_url or default_provider_url("lmstudio"),
         "lmstudio_model": settings.lmstudio_model,
+        # Embedding models for semantic search (empty = keyword-only).
+        "ollama_embedding_model": "",
+        "lmstudio_embedding_model": "",
     }
 
 
@@ -93,6 +96,28 @@ def get_effective_ai_config() -> dict:
     }
 
 
+def get_embedding_config() -> dict | None:
+    """Embedding provider/url/model for semantic search, or None when disabled.
+
+    Uses the same local server as scanning — only the model differs.
+    """
+    data = load_settings()
+    provider = data["provider"].lower()
+    if provider == "ollama":
+        return {
+            "provider": "ollama",
+            "base_url": data["ollama_base_url"].rstrip("/"),
+            "model": data.get("ollama_embedding_model", ""),
+        }
+    if provider == "lmstudio":
+        return {
+            "provider": "lmstudio",
+            "base_url": data["lmstudio_base_url"].rstrip("/"),
+            "model": data.get("lmstudio_embedding_model", ""),
+        }
+    return None
+
+
 def settings_for_api() -> dict:
     data = load_settings()
     provider = data["provider"].lower()
@@ -104,10 +129,13 @@ def settings_for_api() -> dict:
         "provider": provider,
         "base_url": base_url,
         "model": model,
+        "embedding_model": data.get(f"{provider}_embedding_model", ""),
         "ollama_base_url": data["ollama_base_url"],
         "ollama_model": data["ollama_model"],
+        "ollama_embedding_model": data.get("ollama_embedding_model", ""),
         "lmstudio_base_url": data["lmstudio_base_url"],
         "lmstudio_model": data["lmstudio_model"],
+        "lmstudio_embedding_model": data.get("lmstudio_embedding_model", ""),
         "running_in_docker": running_in_docker(),
         "suggested_urls": suggested_provider_urls(provider),
         "suggested_urls_by_provider": {

@@ -190,6 +190,14 @@ export default function ItemCard({
               aria-label={`Select ${item.name}`}
             />
           )}
+          {item.image_url && (
+            <img
+              src={item.image_url}
+              alt=""
+              loading="lazy"
+              className="w-12 h-12 rounded-md object-cover border border-surface-800 flex-shrink-0"
+            />
+          )}
           <div className="flex-1 min-w-0">
             {!isGrouped && (
               <span className="font-mono text-[0.62rem] text-surface-600 tracking-wider">

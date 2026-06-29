@@ -6,6 +6,7 @@ import ItemCard from './ItemCard';
 import ContainerTree from './ContainerTree';
 import MovePicker from './MovePicker';
 import { groupItemsByName } from '../utils/groupItems';
+import { normalizeName } from '../utils/normalizeName';
 
 // Persist the active (in-flight / ready / failed) scans per room so the queue
 // re-attaches after navigating away and back or a page refresh. The backend
@@ -234,6 +235,7 @@ export default function RoomView() {
     const existingContainers = reviewingScan.existingContainers || [];
     const itemTargets = reviewingScan.itemTargets || [];
     const containerFlags = reviewingScan.containerFlags || [];
+    const itemSkip = reviewingScan.itemSkip || [];
     try {
       // 1. Build nameToId from existing containers (case-insensitive).
       const nameToId = {};
@@ -261,6 +263,7 @@ export default function RoomView() {
       const itemsToCreate = [];
       for (let i = 0; i < result.items.length; i++) {
         const item = result.items[i];
+        if (itemSkip[i]) continue;  // already in room — dedup
         const target = itemTargets[i] || { kind: 'loose' };
         if (containerFlags[i]) {
           if (nameToId[item.name.toLowerCase()] != null) continue;
@@ -286,7 +289,7 @@ export default function RoomView() {
           tags: item.tags,
           container_id,
           confidence_score: item.confidence_score,
-          scan_session_id: null,
+          scan_session_id: reviewingScanId,
         });
       }
 
@@ -317,7 +320,22 @@ export default function RoomView() {
       if (s.containerFlags) {
         next.containerFlags = s.containerFlags.filter((_, i) => i !== index);
       }
+      if (s.dupeMatches) {
+        next.dupeMatches = s.dupeMatches.filter((_, i) => i !== index);
+      }
+      if (s.itemSkip) {
+        next.itemSkip = s.itemSkip.filter((_, i) => i !== index);
+      }
       return next;
+    }));
+  };
+
+  const handleItemSkipChange = (index, skip) => {
+    setScans(prev => prev.map(s => {
+      if (s.sessionId !== reviewingScanId || !s.itemSkip) return s;
+      const itemSkip = [...s.itemSkip];
+      itemSkip[index] = skip;
+      return { ...s, itemSkip };
     }));
   };
 
@@ -362,12 +380,21 @@ export default function RoomView() {
           }
           return { kind: 'loose' };
         });
+        // Dedup: flag detected items that already exist in this room so a
+        // re-scan confirms rather than duplicates. Room-scoped, default-skip.
+        const existingByName = new Map();
+        items.forEach(it => existingByName.set(normalizeName(it.name), it));
+        const dupeMatches = scan.result.items.map(it => existingByName.get(normalizeName(it.name)) || null);
+        const itemSkip = dupeMatches.map(m => m != null);
+
         setScans(prev => prev.map(s => s.sessionId === reviewingScanId
           ? {
             ...s,
             existingContainers: existing,
             itemTargets,
             containerFlags: scan.result.items.map(() => false),
+            dupeMatches,
+            itemSkip,
           }
           : s));
       } catch (err) {
@@ -619,8 +646,10 @@ export default function RoomView() {
               <div className="space-y-2">
                 {reviewingScan.result?.items.map((item, i) => {
                   const isContainer = reviewingScan.containerFlags?.[i] ?? false;
+                  const dupe = reviewingScan.dupeMatches?.[i] || null;
+                  const skipped = reviewingScan.itemSkip?.[i] ?? false;
                   return (
-                  <div key={i} className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''}`}>
+                  <div key={i} className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'opacity-50' : ''}`}>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[0.62rem] text-surface-600 w-7 flex-shrink-0">
                         {String(i + 1).padStart(2, '0')}
@@ -653,6 +682,19 @@ export default function RoomView() {
                         <span className="badge-low">Low confidence</span>
                       )}
                     </div>
+                    {dupe && (
+                      <label className="flex items-center gap-2 mt-2 pl-9 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={skipped}
+                          onChange={(e) => handleItemSkipChange(i, e.target.checked)}
+                          className="w-4 h-4 rounded border-surface-600 bg-surface-900 accent-primary-500"
+                        />
+                        <span className="text-sm text-primary-400">
+                          Already in room — skip <span className="text-surface-500">(matches “{dupe.name}”)</span>
+                        </span>
+                      </label>
+                    )}
                     {reviewingScan.containerFlags && (
                       <label className="flex items-center gap-2 mt-2 pl-9 cursor-pointer">
                         <input
@@ -720,12 +762,16 @@ export default function RoomView() {
               >
                 {(() => {
                   const total = reviewingScan.result?.items.length || 0;
-                  const containers = (reviewingScan.containerFlags || []).filter(Boolean).length;
-                  const items = total - containers;
+                  let items = 0, containers = 0, skipped = 0;
+                  for (let i = 0; i < total; i++) {
+                    if (reviewingScan.itemSkip?.[i]) { skipped++; continue; }
+                    if (reviewingScan.containerFlags?.[i]) containers++; else items++;
+                  }
                   const parts = [];
                   if (items > 0) parts.push(`${items} ${items === 1 ? 'item' : 'items'}`);
                   if (containers > 0) parts.push(`${containers} ${containers === 1 ? 'container' : 'containers'}`);
-                  return `File ${parts.join(', ') || '0 items'}`;
+                  const label = `File ${parts.join(', ') || '0 items'}`;
+                  return skipped > 0 ? `${label} · skip ${skipped}` : label;
                 })()}
               </button>
             </div>

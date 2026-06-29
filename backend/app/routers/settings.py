@@ -31,6 +31,8 @@ def update_ai_settings(data: AISettingsUpdate):
     else:
         stored["lmstudio_base_url"] = data.base_url.rstrip("/")
         stored["lmstudio_model"] = data.model
+    if data.embedding_model is not None:
+        stored[f"{provider}_embedding_model"] = data.embedding_model.strip()
     save_settings(stored)
     return settings_for_api()
 

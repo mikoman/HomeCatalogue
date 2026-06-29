@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { aiSettings } from '../api/client';
+import { aiSettings, items as itemsApi } from '../api/client';
 
 const PROVIDERS = [
   { id: 'ollama', label: 'Ollama' },
@@ -10,8 +10,12 @@ export default function Settings() {
   const [provider, setProvider] = useState('ollama');
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
+  const [embeddingModel, setEmbeddingModel] = useState('');
   const [storedUrls, setStoredUrls] = useState({ ollama: '', lmstudio: '' });
   const [storedModels, setStoredModels] = useState({ ollama: '', lmstudio: '' });
+  const [storedEmbeddingModels, setStoredEmbeddingModels] = useState({ ollama: '', lmstudio: '' });
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexResult, setReindexResult] = useState(null);
   const [suggestedUrls, setSuggestedUrls] = useState({ local: '', docker: '' });
   const [suggestedUrlsByProvider, setSuggestedUrlsByProvider] = useState({});
   const [runningInDocker, setRunningInDocker] = useState(false);
@@ -51,6 +55,11 @@ export default function Settings() {
         setProvider(data.provider);
         setBaseUrl(data.base_url);
         setModel(data.model);
+        setEmbeddingModel(data.embedding_model || '');
+        setStoredEmbeddingModels({
+          ollama: data.ollama_embedding_model || '',
+          lmstudio: data.lmstudio_embedding_model || '',
+        });
         setRunningInDocker(!!data.running_in_docker);
         setSuggestedUrls(data.suggested_urls || { local: '', docker: '' });
         setSuggestedUrlsByProvider(data.suggested_urls_by_provider || {});
@@ -87,6 +96,7 @@ export default function Settings() {
     const savedModel = storedModels[nextProvider] || '';
     setBaseUrl(url);
     setModel(savedModel);
+    setEmbeddingModel(storedEmbeddingModels[nextProvider] || '');
     setSuggestedUrls(suggestedUrlsByProvider[nextProvider] || { local: '', docker: '' });
     await loadModels(nextProvider, url);
   };
@@ -125,14 +135,29 @@ export default function Settings() {
         provider,
         base_url: baseUrl.trim(),
         model: model.trim(),
+        embedding_model: embeddingModel.trim(),
       });
       setStoredUrls(prev => ({ ...prev, [provider]: baseUrl.trim() }));
       setStoredModels(prev => ({ ...prev, [provider]: model.trim() }));
+      setStoredEmbeddingModels(prev => ({ ...prev, [provider]: embeddingModel.trim() }));
       setSaved(true);
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleReindex = async () => {
+    setReindexing(true);
+    setReindexResult(null);
+    try {
+      const res = await itemsApi.reindexEmbeddings();
+      setReindexResult(res);
+    } catch (err) {
+      setReindexResult({ error: err.message });
+    } finally {
+      setReindexing(false);
     }
   };
 
@@ -307,6 +332,39 @@ export default function Settings() {
           <p className="text-xs text-surface-500 mt-1.5">
             Use a vision-capable model (e.g. llava, qwen2-vl) for photo scanning.
           </p>
+        </div>
+
+        <div className="pt-1 border-t border-surface-800 space-y-3">
+          <div>
+            <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
+              Embedding model · semantic search
+            </label>
+            <input
+              type="text"
+              list="embed-models"
+              value={embeddingModel}
+              onChange={(e) => { setEmbeddingModel(e.target.value); setSaved(false); }}
+              placeholder={provider === 'ollama' ? 'e.g. nomic-embed-text (optional)' : 'Embedding model id (optional)'}
+              className="input-field text-sm w-full"
+            />
+            <datalist id="embed-models">
+              {models.map(m => <option key={m.id} value={m.id} />)}
+            </datalist>
+            <p className="text-xs text-surface-500 mt-1.5">
+              Optional. Set a text-embedding model to search by meaning (“winter gloves” finds “wool mittens”). Leave blank for keyword-only search.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button type="button" onClick={handleReindex} disabled={reindexing} className="btn-secondary text-sm">
+              {reindexing ? 'Reindexing…' : 'Reindex catalogue'}
+            </button>
+            {reindexResult && (
+              reindexResult.error
+                ? <span className="text-xs text-red-400">{reindexResult.error}</span>
+                : <span className="font-mono text-[0.62rem] text-surface-500">{reindexResult.embedded}/{reindexResult.total} items embedded</span>
+            )}
+          </div>
+          <p className="text-xs text-surface-500">Save settings first, then reindex so existing items become searchable by meaning.</p>
         </div>
 
         <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">

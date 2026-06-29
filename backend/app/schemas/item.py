@@ -1,8 +1,15 @@
 """Pydantic schemas for Item CRUD."""
 
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from typing import Optional
+
+
+def _storage_url(path: str | None) -> str | None:
+    """Public URL for a stored image, from a path or bare filename."""
+    if not path:
+        return None
+    return f"/api/storage/{path.rsplit('/', 1)[-1]}"
 
 
 class ItemCreate(BaseModel):
@@ -42,6 +49,11 @@ class ItemRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        return _storage_url(self.image_path)
+
 
 class ItemBulkCreate(BaseModel):
     """Used for batch-creating items from an AI scan result."""
@@ -71,5 +83,11 @@ class ItemSearchResult(BaseModel):
     container_id: int | None
     container_name: str | None
     confidence_score: float | None
+    image_path: str | None = None
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        return _storage_url(self.image_path)
