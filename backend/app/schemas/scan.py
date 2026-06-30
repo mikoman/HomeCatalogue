@@ -15,6 +15,8 @@ class AIItem(BaseModel):
     tags: list[str] = []
     suggested_container: str | None = None
     confidence_score: float = 1.0
+    detection_label: str | None = None  # short generic noun the detector localizes on
+    bbox: list[float] | None = None  # [x1,y1,x2,y2] normalized 0..1, filled by the detector
 
 
 class ScanResult(BaseModel):

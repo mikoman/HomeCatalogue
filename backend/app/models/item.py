@@ -18,6 +18,7 @@ class Item(Base):
     image_path = Column(String(1000), nullable=True)
     scan_session_id = Column(String(100), nullable=True, index=True)  # Groups items from one scan
     confidence_score = Column(Float, nullable=True)
+    bbox = Column(JSON, nullable=True)  # [x1,y1,x2,y2] normalized 0..1, from the detector
     embedding = Column(JSON, nullable=True)  # semantic-search vector; None = not indexed
     notes = Column(Text, default="")
     date_added = Column(DateTime, default=datetime.utcnow)

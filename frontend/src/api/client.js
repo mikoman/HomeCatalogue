@@ -128,3 +128,14 @@ export const aiSettings = {
   },
   resetAll: () => request('/settings/reset', { method: 'POST' }),
 };
+
+// Object detector (YOLO-World sidecar) — draws boxes around scanned items.
+export const detector = {
+  update: (data) => request('/settings/detector', { method: 'PUT', body: JSON.stringify(data) }),
+  test: (baseUrl) => {
+    const params = new URLSearchParams();
+    if (baseUrl) params.set('base_url', baseUrl);
+    const qs = params.toString();
+    return request(`/settings/detector/test${qs ? `?${qs}` : ''}`);
+  },
+};

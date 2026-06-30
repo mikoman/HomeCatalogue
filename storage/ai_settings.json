@@ -3,5 +3,10 @@
   "ollama_base_url": "http://host.docker.internal:11434",
   "ollama_model": "qwen3-vl:8b",
   "lmstudio_base_url": "http://host.docker.internal:1234/v1",
-  "lmstudio_model": "qwen/qwen3-vl-8b"
+  "lmstudio_model": "qwen/qwen3-vl-8b",
+  "ollama_embedding_model": "",
+  "lmstudio_embedding_model": "text-embedding-nomic-embed-text-v1.5",
+  "box_source": "vlm",
+  "detector_base_url": "http://host.docker.internal:8077",
+  "detector_enabled": true
 }

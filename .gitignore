@@ -25,3 +25,5 @@ storage/uploads/*
 .idea/
 .vscode/
 *.log
+frontend/src/api/client.js
+*.pt

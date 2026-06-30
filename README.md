@@ -183,6 +183,38 @@ npm run dev
 
 > Running the backend locally (not in Docker)? Use `localhost` URLs in Settings instead of `host.docker.internal`.
 
+### 6️⃣ (Optional) Enable bounding boxes — YOLO-World detector
+
+The VLM names items; an optional **YOLO-World** sidecar localizes them so scanned
+items get **outlined boxes** drawn on the photo (and stored per item). It runs on
+the **host** (not in Docker) so it can use your GPU/MPS — the backend calls it over HTTP.
+
+```bash
+cd detector
+python -m venv venv && source venv/bin/activate   # or: uv venv && source .venv/bin/activate
+pip install -r requirements.txt        # pulls ultralytics + torch
+uvicorn server:app --host 0.0.0.0 --port 8077      # weights auto-download on first run
+```
+
+> Bind to `0.0.0.0` (not the default `127.0.0.1`) so the Dockerized backend can
+> reach it via `host.docker.internal`. Device: **CUDA if present, else CPU**.
+> Apple **MPS is not usable** — YOLO-World's CLIP text encoder errors on MPS — so
+> Macs run on CPU. Override with `DETECTOR_DEVICE`; `/health` reports it.
+>
+> **Recall vs speed:** default model is `yolov8x-worldv2.pt` (best recall, a few
+> seconds/scan on CPU). For faster, lower-recall detection set
+> `DETECTOR_MODEL=yolov8s-worldv2.pt`. Sensitivity is `DETECTOR_CONF` (default `0.1`);
+> association keeps only the best box per item, so a low value adds recall without
+> cluttering the overlay. Open-vocab detection still misses uncommon objects.
+
+Then in **Settings → Object detector**: tick **Enable**, set the URL
+(`http://host.docker.internal:8077` from Docker, else `http://localhost:8077`),
+**Test**, and **Save**. Leave it off and scans work exactly as before — the
+detector never blocks a scan if it's disabled or unreachable.
+
+> Speed: the backend downscales the image sent to the model(s) (longest edge
+> `SCAN_MAX_EDGE`, default `1280`) — faster inference, negligible quality loss.
+
 ---
 
 ## 🤖 AI Providers

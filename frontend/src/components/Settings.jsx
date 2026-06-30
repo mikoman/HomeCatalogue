@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { aiSettings, items as itemsApi } from '../api/client';
+import { aiSettings, detector as detectorApi, items as itemsApi } from '../api/client';
 
 const PROVIDERS = [
   { id: 'ollama', label: 'Ollama' },
@@ -16,6 +16,12 @@ export default function Settings() {
   const [storedEmbeddingModels, setStoredEmbeddingModels] = useState({ ollama: '', lmstudio: '' });
   const [reindexing, setReindexing] = useState(false);
   const [reindexResult, setReindexResult] = useState(null);
+  const [boxSource, setBoxSource] = useState('off');
+  const [detectorUrl, setDetectorUrl] = useState('');
+  const [detectorTesting, setDetectorTesting] = useState(false);
+  const [detectorTestResult, setDetectorTestResult] = useState(null);
+  const [detectorSaving, setDetectorSaving] = useState(false);
+  const [detectorSaved, setDetectorSaved] = useState(false);
   const [showReset, setShowReset] = useState(false);
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -75,6 +81,8 @@ export default function Settings() {
           ollama: data.ollama_model,
           lmstudio: data.lmstudio_model,
         });
+        setBoxSource(data.box_source || (data.detector_enabled ? 'yolo' : 'off'));
+        setDetectorUrl(data.detector_base_url || '');
         await loadModels(data.provider, data.base_url);
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -166,6 +174,32 @@ export default function Settings() {
     } catch (err) {
       setResetError(err.message);
       setResetting(false);
+    }
+  };
+
+  const handleDetectorTest = async () => {
+    if (!detectorUrl.trim()) return;
+    setDetectorTesting(true);
+    setDetectorTestResult(null);
+    try {
+      setDetectorTestResult(await detectorApi.test(detectorUrl.trim()));
+    } catch (err) {
+      setDetectorTestResult({ ok: false, message: err.message, latency_ms: 0, model_count: 0 });
+    } finally {
+      setDetectorTesting(false);
+    }
+  };
+
+  const handleDetectorSave = async () => {
+    setDetectorSaving(true);
+    setDetectorSaved(false);
+    try {
+      await detectorApi.update({ box_source: boxSource, base_url: detectorUrl.trim() });
+      setDetectorSaved(true);
+    } catch (err) {
+      setDetectorTestResult({ ok: false, message: err.message, latency_ms: 0, model_count: 0 });
+    } finally {
+      setDetectorSaving(false);
     }
   };
 
@@ -392,6 +426,89 @@ export default function Settings() {
           {saving ? 'Saving…' : 'Save settings'}
         </button>
       </form>
+
+      <div className="card space-y-4">
+        <div>
+          <p className="eyebrow">Bounding boxes</p>
+          <h2 className="font-display text-lg font-semibold text-surface-100 mt-1">Detection mode</h2>
+          <p className="text-sm text-surface-400 mt-1">
+            Choose how scanned items get outlined boxes on the photo.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { id: 'off', label: 'Off', hint: 'No boxes' },
+            { id: 'yolo', label: 'YOLO-World', hint: 'Sidecar detector' },
+            { id: 'vlm', label: 'VLM', hint: 'Qwen grounding' },
+          ].map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => { setBoxSource(opt.id); setDetectorSaved(false); }}
+              className={`px-3 py-2.5 rounded-md border text-left transition-colors ${
+                boxSource === opt.id
+                  ? 'border-primary-500 bg-surface-800 ring-1 ring-primary-500/40'
+                  : 'border-surface-700 hover:border-surface-600'
+              }`}
+            >
+              <span className={`font-medium block text-sm ${boxSource === opt.id ? 'text-primary-400' : 'text-surface-300'}`}>
+                {opt.label}
+              </span>
+              <span className="text-[0.62rem] text-surface-500 font-mono uppercase tracking-wider">{opt.hint}</span>
+            </button>
+          ))}
+        </div>
+
+        {boxSource === 'yolo' && (
+          <div>
+            <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
+              Detector URL
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={detectorUrl}
+                onChange={(e) => { setDetectorUrl(e.target.value); setDetectorSaved(false); setDetectorTestResult(null); }}
+                placeholder={runningInDocker ? 'http://host.docker.internal:8077' : 'http://localhost:8077'}
+                className="input-field text-sm flex-1"
+              />
+              <button
+                type="button"
+                onClick={handleDetectorTest}
+                disabled={detectorTesting || !detectorUrl.trim()}
+                className="btn-secondary text-sm whitespace-nowrap"
+              >
+                {detectorTesting ? 'Testing…' : 'Test'}
+              </button>
+            </div>
+            <p className="text-xs text-surface-500 mt-1.5">
+              Run the sidecar from <code className="text-surface-300">detector/</code>; it adds a little time per scan.
+            </p>
+          </div>
+        )}
+
+        {boxSource === 'vlm' && (
+          <p className="text-xs text-surface-500">
+            The vision model draws boxes itself — no sidecar needed. Best with Qwen3-VL or similar grounding-capable models.
+          </p>
+        )}
+
+        {detectorTestResult && (
+          <div className={`card py-2.5 px-3 ${detectorTestResult.ok ? 'border-green-900 bg-green-950/20' : 'border-red-900 bg-red-950/30'}`}>
+            <p className={`text-sm font-medium ${detectorTestResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+              {detectorTestResult.ok ? 'Detector OK' : 'Detector unreachable'}
+            </p>
+            <p className="text-surface-400 text-xs mt-1">{detectorTestResult.message}</p>
+          </div>
+        )}
+
+        {detectorSaved && <p className="text-primary-400 text-sm">Detection settings saved.</p>}
+
+        <button type="button" onClick={handleDetectorSave} disabled={detectorSaving} className="btn-primary w-full sm:w-auto">
+          {detectorSaving ? 'Saving…' : 'Save detection settings'}
+        </button>
+      </div>
 
       <div className="card border-red-900/50 bg-red-950/10 space-y-3">
         <div>

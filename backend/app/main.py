@@ -38,12 +38,14 @@ def _migrate_scan_sessions() -> None:
 
 
 def _migrate_items() -> None:
-    """Add the semantic-search embedding column to pre-existing item tables."""
+    """Add columns introduced after initial deploy (SQLite has no ALTER IF NOT EXISTS)."""
     with engine.begin() as conn:
         rows = conn.execute(text("PRAGMA table_info(items)")).fetchall()
         col_names = {row[1] for row in rows}
         if rows and "embedding" not in col_names:
             conn.execute(text("ALTER TABLE items ADD COLUMN embedding JSON"))
+        if rows and "bbox" not in col_names:
+            conn.execute(text("ALTER TABLE items ADD COLUMN bbox JSON"))
 
 
 app = FastAPI(

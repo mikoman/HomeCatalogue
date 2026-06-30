@@ -69,3 +69,41 @@ async def test_connection(provider: str, base_url: str) -> dict:
         "latency_ms": latency_ms,
         "model_count": len(models),
     }
+
+
+async def test_detector(base_url: str) -> dict:
+    """Ping the YOLO-World detector sidecar's /health endpoint."""
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{base_url.rstrip('/')}/health")
+        resp.raise_for_status()
+        data = resp.json()
+        latency_ms = int((time.monotonic() - start) * 1000)
+        if data.get("ok"):
+            return {
+                "ok": True,
+                "message": f"Connected — {data.get('model', 'detector')}",
+                "latency_ms": latency_ms,
+                "model_count": 1,
+            }
+        return {
+            "ok": False,
+            "message": "Sidecar responded but is not ready.",
+            "latency_ms": latency_ms,
+            "model_count": 0,
+        }
+    except httpx.HTTPError as exc:
+        return {
+            "ok": False,
+            "message": f"Could not reach detector: {exc}",
+            "latency_ms": int((time.monotonic() - start) * 1000),
+            "model_count": 0,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "message": str(exc),
+            "latency_ms": int((time.monotonic() - start) * 1000),
+            "model_count": 0,
+        }

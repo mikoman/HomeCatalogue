@@ -21,6 +21,7 @@ class ItemCreate(BaseModel):
     image_path: str | None = None
     scan_session_id: str | None = None
     confidence_score: float | None = None
+    bbox: list[float] | None = None  # [x1,y1,x2,y2] normalized 0..1, from the detector
     notes: str = ""
 
 
@@ -43,6 +44,7 @@ class ItemRead(BaseModel):
     image_path: str | None
     scan_session_id: str | None
     confidence_score: float | None
+    bbox: list[float] | None
     notes: str
     date_added: datetime
     updated_at: datetime

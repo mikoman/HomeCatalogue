@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     omlx_base_url: str = os.getenv("OMLX_BASE_URL", "http://host.docker.internal:8000/v1")
     omlx_api_key: str = os.getenv("OMLX_API_KEY", "")
 
+    # Object detector sidecar (YOLO-World) — localizes scanned items into boxes.
+    # Runs on the host (GPU/MPS); the Docker backend reaches it via host.docker.internal.
+    detector_base_url: str = os.getenv("DETECTOR_BASE_URL", "http://host.docker.internal:8077")
+    # Speed lever: cap the longest edge of the image sent to the model(s).
+    scan_max_edge: int = int(os.getenv("SCAN_MAX_EDGE", "1280"))
+
     # Server
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8000"))

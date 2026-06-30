@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { rooms as roomsApi, items as itemsApi, containers as containersApi, scan } from '../api/client';
 import { compressImage } from '../utils/imageCompression';
 import ItemCard from './ItemCard';
+import ItemDetailLightbox from './ItemDetailLightbox';
 import ContainerTree from './ContainerTree';
 import MovePicker from './MovePicker';
 import { groupItemsByName } from '../utils/groupItems';
@@ -53,10 +54,13 @@ export default function RoomView() {
   const [scans, setScans] = useState([]);          // Scan[] queue
   const [scanError, setScanError] = useState(null); // upload-time error (couldn't even enqueue)
   const [reviewingScanId, setReviewingScanId] = useState(null);
+  const [hoveredItem, setHoveredItem] = useState(null);  // item index whose box is highlighted
   const [selectedContainer, setSelectedContainer] = useState(null);
   const [filterCategory, setFilterCategory] = useState(null);
   const [selectedItemIds, setSelectedItemIds] = useState(new Set());  // multi-select for item moves
   const [movingItems, setMovingItems] = useState(null);               // number[] when item-move picker is open
+  const [selectMode, setSelectMode] = useState(false);                // opt-in selection mode
+  const [detailGroup, setDetailGroup] = useState(null);               // grouped item open in the detail lightbox
   const [pendingScanContainerId, setPendingScanContainerId] = useState(null);
 
   // Derived queue buckets
@@ -197,6 +201,21 @@ export default function RoomView() {
     fileInputRef.current?.click();
   };
 
+  const handleRescan = async (sessionId) => {
+    setReviewingScanId(null);
+    setScans(prev => prev.map(s => s.sessionId === sessionId
+      ? { ...s, status: 'pending', result: null, error: null }
+      : s));
+    try {
+      await scan.retry(sessionId);
+      startPolling(sessionId);
+    } catch (err) {
+      setScans(prev => prev.map(s => s.sessionId === sessionId
+        ? { ...s, status: 'failed', error: err.message }
+        : s));
+    }
+  };
+
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -226,6 +245,20 @@ export default function RoomView() {
       }
       return next;
     });
+  };
+
+  const toggleSelectMode = () => {
+    setSelectMode(prev => {
+      const next = !prev;
+      if (!next) setSelectedItemIds(new Set());
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    const all = new Set();
+    for (const it of filteredItems) all.add(it.id);
+    setSelectedItemIds(all);
   };
 
   // ---- review overlay (operates on the selected scan, not a single global result) ----
@@ -289,6 +322,7 @@ export default function RoomView() {
           tags: item.tags,
           container_id,
           confidence_score: item.confidence_score,
+          bbox: item.bbox,
           scan_session_id: reviewingScanId,
         });
       }
@@ -584,9 +618,10 @@ export default function RoomView() {
 
       {/* Scan result overlay — bound to the selected scan, not a single global result */}
       {reviewingScan && (
-        <div className="fixed inset-0 bg-surface-950/95 backdrop-blur-sm z-50 overflow-y-auto safe-top safe-bottom">
-          <div className="hazard h-1 w-full sticky top-0" />
-          <div className="max-w-2xl mx-auto px-4 py-6">
+        <div className="fixed inset-0 bg-surface-950/95 backdrop-blur-sm z-50 flex flex-col safe-top safe-bottom">
+          <div className="hazard h-1 w-full shrink-0" />
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="max-w-2xl mx-auto px-4 py-6">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <p className="eyebrow">Review scan</p>
@@ -597,23 +632,52 @@ export default function RoomView() {
                   </p>
                 )}
               </div>
-              <button
-                onClick={() => setReviewingScanId(null)}
-                className="p-2 -mr-2 text-surface-500 hover:text-surface-200 transition-colors"
-                aria-label="Close review"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleRescan(reviewingScanId)}
+                  className="btn-secondary text-sm mr-2"
+                  title="Re-run AI analysis on this photo"
+                >
+                  <svg className="w-4 h-4 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Re-scan
+                </button>
+                <button
+                  onClick={() => setReviewingScanId(null)}
+                  className="p-2 -mr-2 text-surface-500 hover:text-surface-200 transition-colors"
+                  aria-label="Close review"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Source image */}
             {reviewingScan.imageUrl && (
               <div className="mb-6">
                 <p className="eyebrow mb-2">Source</p>
-                <div className="rounded-lg overflow-hidden border border-surface-800">
-                  <img src={reviewingScan.imageUrl} alt="Scanned area" className="w-full h-auto" />
+                <div className="relative rounded-lg overflow-hidden border border-surface-800">
+                  <img src={reviewingScan.imageUrl} alt="Scanned area" className="w-full h-auto block" />
+                  {/* Detector boxes — normalized 0..1, so % positioning lines up at any size */}
+                  {reviewingScan.result?.items.map((item, i) => {
+                    if (!item.bbox || reviewingScan.itemSkip?.[i]) return null;
+                    const [x1, y1, x2, y2] = item.bbox;
+                    const active = hoveredItem === i;
+                    return (
+                      <div
+                        key={i}
+                        className={`absolute border-2 pointer-events-none transition-colors ${active ? 'border-primary-300 bg-primary-500/15' : 'border-primary-500/70'}`}
+                        style={{ left: `${x1 * 100}%`, top: `${y1 * 100}%`, width: `${(x2 - x1) * 100}%`, height: `${(y2 - y1) * 100}%` }}
+                      >
+                        <span className="absolute top-0 left-0 bg-primary-500 text-surface-950 font-mono text-[0.6rem] leading-tight px-1">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -649,7 +713,12 @@ export default function RoomView() {
                   const dupe = reviewingScan.dupeMatches?.[i] || null;
                   const skipped = reviewingScan.itemSkip?.[i] ?? false;
                   return (
-                  <div key={i} className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'opacity-50' : ''}`}>
+                  <div
+                    key={i}
+                    onMouseEnter={() => setHoveredItem(i)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                    className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'opacity-50' : ''} ${hoveredItem === i && item.bbox ? 'ring-1 ring-primary-500/50' : ''}`}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[0.62rem] text-surface-600 w-7 flex-shrink-0">
                         {String(i + 1).padStart(2, '0')}
@@ -747,8 +816,12 @@ export default function RoomView() {
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 sticky bottom-0 bg-surface-950/95 backdrop-blur-sm pt-4 pb-6 safe-bottom">
+            </div>
+          </div>
+
+          {/* Actions — always visible, pinned outside the scroll area */}
+          <div className="shrink-0 border-t border-surface-800 bg-surface-950/95 backdrop-blur-sm">
+            <div className="max-w-2xl mx-auto px-4 py-4 flex gap-3 safe-bottom">
               <button
                 onClick={() => { removeScan(reviewingScanId); setReviewingScanId(null); }}
                 className="btn-secondary flex-1"
@@ -825,6 +898,39 @@ export default function RoomView() {
         </div>
       )}
 
+      {/* Selection-mode toolbar */}
+      {filteredItems.length > 0 && (
+        <div className="flex items-center justify-between gap-3 -mx-4 px-4 sm:-mx-6 sm:px-6">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSelectMode}
+              className={selectMode ? 'btn-primary text-xs' : 'btn-secondary text-xs'}
+              aria-pressed={selectMode}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+              {selectMode ? 'Selecting' : 'Select'}
+            </button>
+            {selectMode && (
+              <button
+                type="button"
+                onClick={selectedItemIds.size > 0 ? () => setSelectedItemIds(new Set()) : selectAllVisible}
+                className="btn-secondary text-xs"
+              >
+                {selectedItemIds.size > 0 ? 'Clear all' : 'Select all'}
+              </button>
+            )}
+          </div>
+          {selectMode && selectedItemIds.size > 0 && (
+            <span className="text-xs text-surface-400 font-mono">
+              {selectedItemIds.size} {selectedItemIds.size === 1 ? 'item' : 'items'}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Items grid */}
       {filteredItems.length === 0 ? (
         <div className="card text-center py-14">
@@ -879,7 +985,8 @@ export default function RoomView() {
                 items={group.items}
                 count={group.count}
                 selected={group.items.every(i => selectedItemIds.has(i.id))}
-                onToggleSelect={() => toggleSelectGroup(group.items)}
+                onToggleSelect={selectMode ? () => toggleSelectGroup(group.items) : undefined}
+                onOpenItem={selectMode ? undefined : () => setDetailGroup(group)}
                 onMove={handleMoveSingleItem}
                 onUpdate={(updates) =>
                   Promise.all(group.items.map(i => itemsApi.update(i.id, updates))).then(loadData)
@@ -920,6 +1027,27 @@ export default function RoomView() {
           itemIds={movingItems}
           onDone={() => { setSelectedItemIds(new Set()); loadData(); }}
           onClose={() => setMovingItems(null)}
+        />
+      )}
+
+      {/* Item detail lightbox (tap an item outside selection mode) */}
+      {detailGroup && (
+        <ItemDetailLightbox
+          item={detailGroup.items[0]}
+          items={detailGroup.items}
+          count={detailGroup.count}
+          onClose={() => setDetailGroup(null)}
+          onMove={handleMoveSingleItem}
+          onUpdate={(updates) =>
+            Promise.all(detailGroup.items.map(i => itemsApi.update(i.id, updates))).then(() => {
+              setDetailGroup(g => g ? { ...g, items: g.items.map(i => ({ ...i, ...updates })) } : g);
+              loadData();
+            })
+          }
+          onDelete={() => itemsApi.delete(detailGroup.items[0].id).then(() => { setDetailGroup(null); loadData(); })}
+          onPromote={detailGroup.count === 1
+            ? () => itemsApi.promoteToContainer(detailGroup.items[0].id).then(() => { setDetailGroup(null); loadData(); })
+            : undefined}
         />
       )}
     </div>

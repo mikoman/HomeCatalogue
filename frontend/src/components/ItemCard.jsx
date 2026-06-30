@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { cropStyle } from '../utils/cropStyle';
 
 export default function ItemCard({
   item,
@@ -11,6 +12,7 @@ export default function ItemCard({
   onPromote,
   selected,
   onToggleSelect,
+  onOpenItem,
 }) {
   const groupItems = items ?? [item];
   const [isEditing, setIsEditing] = useState(false);
@@ -21,6 +23,7 @@ export default function ItemCard({
   const [promoting, setPromoting] = useState(false);
   const [promoteError, setPromoteError] = useState(null);
   const selectable = typeof onToggleSelect === 'function';
+  const openable = typeof onOpenItem === 'function';
   const isGrouped = count > 1;
 
   const handleSave = async () => {
@@ -175,8 +178,8 @@ export default function ItemCard({
 
   return (
     <div
-      className={`card group hover:border-surface-600 transition-all min-w-0 overflow-hidden ${selected ? 'border-primary-500 ring-1 ring-primary-500/40' : ''}`}
-      onClick={selectable ? () => onToggleSelect() : undefined}
+      className={`card group hover:border-surface-600 transition-all min-w-0 overflow-hidden ${selected ? 'border-primary-500 ring-1 ring-primary-500/40' : ''} ${openable && !selectable ? 'cursor-pointer' : ''}`}
+      onClick={selectable ? () => onToggleSelect() : openable ? () => onOpenItem() : undefined}
     >
       <div className="flex items-start justify-between gap-2 min-w-0">
         <div className="flex-1 min-w-0 flex items-start gap-2">
@@ -191,12 +194,21 @@ export default function ItemCard({
             />
           )}
           {item.image_url && (
-            <img
-              src={item.image_url}
-              alt=""
-              loading="lazy"
-              className="w-12 h-12 rounded-md object-cover border border-surface-800 flex-shrink-0"
-            />
+            item.bbox && cropStyle(item.image_url, item.bbox)
+              ? (
+                <div
+                  aria-hidden
+                  style={cropStyle(item.image_url, item.bbox)}
+                  className="w-12 h-12 rounded-md border border-surface-800 flex-shrink-0 bg-surface-900"
+                />
+              ) : (
+                <img
+                  src={item.image_url}
+                  alt=""
+                  loading="lazy"
+                  className="w-12 h-12 rounded-md object-cover border border-surface-800 flex-shrink-0"
+                />
+              )
           )}
           <div className="flex-1 min-w-0">
             {!isGrouped && (

@@ -2,9 +2,12 @@
 
 import json
 import base64
+import io
 from pathlib import Path
+from PIL import Image, ImageOps
 from app.config import settings
-from app.services.ai_settings_store import get_effective_ai_config
+from app.services.ai_settings_store import get_effective_ai_config, get_box_source
+from app.services.detector import detect_boxes
 from app.schemas.scan import ScanResult, AIItem, AIContainer
 
 
@@ -15,45 +18,48 @@ Rules:
 - Identify structural boundaries within the image to propose containers. If looking at a bookshelf, each shelf is a container. If looking at a wardrobe, drawers or hanging rails are containers.
 - Storage objects that are themselves containers (drawers, suitcases, bins, baskets, boxes, chests, wardrobes, shelving units, trunks, crates) belong in proposed_containers, not items — even when their contents are not visible or the container appears empty.
 - Assign relevant categories and contextual tags to every item to facilitate rich keyword searching.
+- For every item, set detection_label to a single short, generic object noun an object detector would recognize (e.g. "bottle", "book", "mug", "chair", "box", "shoe"), even when the name is more specific.
 - Output your findings strictly in the requested JSON format. Do not include markdown formatting, conversational text, or explanations outside the JSON payload."""
 
 
 JSON_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "proposed_containers": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "description": {"type": "string"},
-                },
-                "required": ["name"],
-                "additionalProperties": False,
-            },
+  "type": "object",
+  "properties": {
+    "proposed_containers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" }
         },
-        "items": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "category": {"type": "string"},
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "suggested_container": {"type": "string"},
-                    "confidence_score": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                },
-                "required": ["name"],
-                "additionalProperties": False,
-            },
-        },
+        "required": ["name"],
+        "additionalProperties": False
+      }
     },
-    "required": ["items"],
-    "additionalProperties": False,
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "category": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "suggested_container": { "type": "string" },
+          "confidence_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "detection_label": { "type": "string" },
+          "bbox": { "type": "array", "items": { "type": "number" } }
+        },
+        "required": ["name"],
+        "additionalProperties": False
+      }
+    }
+  },
+  "required": ["items"],
+  "additionalProperties": False
 }
 
 
@@ -94,8 +100,22 @@ async def process_image_with_ai(
     container's contents — the prompt focuses on items inside that container.
     """
     provider = get_effective_ai_config()["provider"].lower()
+    box_source = get_box_source()  # "off" | "yolo" | "vlm"
     system_prompt = _build_system_prompt(existing_containers, target_container)
     user_prompt = _build_user_prompt(target_container)
+
+    # VLM grounding: ask the model for boxes directly. Qwen-VL natively
+    # outputs 0–1000 normalized coordinates, so we ask in that space and
+    # convert to 0..1 in _normalize_bbox. No second model, no label matching.
+    vlm_w = vlm_h = 0
+    if box_source == "vlm":
+        with Image.open(io.BytesIO(_capped_jpeg_bytes(image_path))) as im:
+            vlm_w, vlm_h = im.size
+        user_prompt += (
+            f"\n\nFor EVERY item also include \"bbox\": [x1, y1, x2, y2] — its "
+            f"bounding box in normalized coordinates where 0 is the top/left "
+            f"edge and 1000 is the bottom/right edge of the image."
+        )
 
     dispatch = {
         "openai": _process_openai,
@@ -108,7 +128,7 @@ async def process_image_with_ai(
         raise ValueError(f"Unsupported AI provider: {provider}")
 
     try:
-        return await dispatch(image_path, system_prompt, user_prompt)
+        result = await dispatch(image_path, system_prompt, user_prompt)
     except ValueError:
         # Parse failed (bad/no JSON) — give the model one more shot with a
         # stricter nudge before the scan lands in the failed bin. Small local
@@ -118,7 +138,23 @@ async def process_image_with_ai(
             + "\n\nYour previous response was not valid JSON. Return ONLY the "
             "JSON object matching the schema — no prose, no markdown fences."
         )
-        return await dispatch(image_path, system_prompt, repair_prompt)
+        result = await dispatch(image_path, system_prompt, repair_prompt)
+
+    if box_source == "vlm":
+        for it in result.items:
+            it.bbox = _normalize_bbox(it.bbox, vlm_w, vlm_h)
+    elif box_source == "yolo":
+        # The detector is the source of truth — drop any boxes the model emitted.
+        for it in result.items:
+            it.bbox = None
+        classes = sorted({(it.detection_label or it.name) for it in result.items if (it.detection_label or it.name)})
+        if classes:
+            detections = await detect_boxes(_capped_jpeg_bytes(image_path), classes)
+            _associate(result.items, detections)
+    else:  # "off"
+        for it in result.items:
+            it.bbox = None
+    return result
 
 
 def _build_system_prompt(
@@ -153,10 +189,88 @@ def _build_system_prompt(
     return prompt
 
 
+def _capped_jpeg_bytes(image_path: str) -> bytes:
+    """Downscale so the longest edge is <= settings.scan_max_edge; return JPEG bytes.
+
+    Speed lever: a smaller payload means faster inference. Aspect ratio is
+    preserved (uniform scale), so detector boxes — normalized 0..1 — stay valid
+    against the full-resolution stored image the frontend displays.
+    """
+    with Image.open(image_path) as img:
+        img = ImageOps.exif_transpose(img)  # match browser's EXIF rotation
+        img = img.convert("RGB")
+        longest = max(img.size)
+        cap = settings.scan_max_edge
+        if cap and longest > cap:
+            scale = cap / longest
+            img = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
+
+
 def _encode_image(image_path: str) -> str:
-    """Encode image to base64 for API transmission."""
-    with open(image_path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+    """Encode the (downscaled) image to base64 for API transmission."""
+    return base64.b64encode(_capped_jpeg_bytes(image_path)).decode("utf-8")
+
+
+def _normalize_bbox(box, w: int, h: int) -> list[float] | None:
+    """Normalize a VLM-returned bbox to [x1,y1,x2,y2] in 0..1.
+
+    Qwen-VL natively outputs coordinates in 0–1000 normalized space. Some
+    models may return 0..1 floats or absolute pixels instead, so we detect
+    the scale heuristically:
+      - all values ≤ 1.5  → already 0..1
+      - all values ≤ 1000 → 0–1000 normalized (Qwen-VL native)
+      - any value > 1000  → absolute pixels of the (w,h) image
+
+    Tolerates reversed corners; drops degenerate/parse-failed boxes.
+    """
+    if not (isinstance(box, list) and len(box) == 4):
+        return None
+    try:
+        x1, y1, x2, y2 = (float(v) for v in box)
+    except (TypeError, ValueError):
+        return None
+    abs_max = max(abs(x1), abs(y1), abs(x2), abs(y2))
+    if abs_max <= 1.5:          # already 0..1
+        sx = sy = 1.0
+    elif abs_max <= 1000:       # Qwen-VL 0–1000 normalized
+        sx = sy = 1.0 / 1000.0
+    else:                       # absolute pixels
+        if not w or not h:
+            return None
+        sx, sy = 1.0 / w, 1.0 / h
+    x1, x2 = sorted((x1 * sx, x2 * sx))
+    y1, y2 = sorted((y1 * sy, y2 * sy))
+    clamp = lambda v: round(min(1.0, max(0.0, v)), 5)
+    nb = [clamp(x1), clamp(y1), clamp(x2), clamp(y2)]
+    if nb[2] <= nb[0] or nb[3] <= nb[1]:  # zero-area after clamping
+        return None
+    return nb
+
+
+def _associate(items: list[AIItem], detections: list[dict]) -> None:
+    """Assign each detection's box to a matching item, in place.
+
+    Greedy label-bucket match: group detections by lowercased label, then for
+    each item pop the highest-score unused detection sharing its detection_label
+    (falling back to its name). Items with no match keep bbox=None — still
+    catalogued, just without an outline.
+    ponytail: greedy, not optimal; upgrade to IoU/Hungarian if duplicate-heavy
+    scenes mis-assign boxes.
+    """
+    buckets: dict[str, list[dict]] = {}
+    for d in detections:
+        buckets.setdefault((d.get("label") or "").lower(), []).append(d)
+    for dets in buckets.values():
+        dets.sort(key=lambda d: d.get("score", 0), reverse=True)
+
+    for item in items:
+        label = (item.detection_label or item.name or "").lower()
+        dets = buckets.get(label)
+        if dets:
+            item.bbox = dets.pop(0).get("bbox")
 
 
 async def _process_openai(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
@@ -186,7 +300,7 @@ async def _process_openai(image_path: str, system_prompt: str, user_prompt: str)
         ],
         response_format={"type": "json_schema", "json_schema": {"name": "scan_result", "schema": JSON_SCHEMA}},
         temperature=0.1,
-        max_tokens=4096,
+        max_tokens=2048,
     )
 
     content = response.choices[0].message.content
@@ -202,7 +316,7 @@ async def _process_anthropic(image_path: str, system_prompt: str, user_prompt: s
 
     response = client.messages.create(
         model=settings.anthropic_model,
-        max_tokens=4096,
+        max_tokens=2048,
         system=system_prompt,
         messages=[
             {
@@ -322,6 +436,13 @@ async def _process_openai_compatible(
                     },
                 ],
                 "stream": False,
+                # Constrain output to the schema (LM Studio enforces it as a grammar).
+                # Without this the model only sees prose and invents field names —
+                # dropping "name", so the parser finds nothing.
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {"name": "scan_result", "schema": JSON_SCHEMA},
+                },
             },
         )
     response.raise_for_status()
@@ -394,16 +515,27 @@ def _parse_scan_result(content: str) -> ScanResult:
 
     containers = []
     for c in data.get("proposed_containers") or []:
-        name = c.get("name")
+        # Local models drift from the schema (e.g. qwen returns container_name); accept aliases.
+        name = c.get("name") or c.get("container_name")
         if not name:
             continue
         containers.append(AIContainer(name=name, description=c.get("description", "")))
 
     items = []
     for i in data.get("items") or []:
-        name = i.get("name")
+        # Prefer a real name; fall back through aliases, then the detector label,
+        # so a schema-drifting model never silently drops the whole inventory.
+        name = i.get("name") or i.get("item_name") or i.get("detection_label")
         if not name:
             continue
+        raw_bbox = i.get("bbox")  # VLM box (raw pixels, normalized later); ignored in yolo/off mode
+        if isinstance(raw_bbox, list) and len(raw_bbox) == 4:
+            try:
+                raw_bbox = [float(v) for v in raw_bbox]
+            except (TypeError, ValueError):
+                raw_bbox = None
+        else:
+            raw_bbox = None
         items.append(
             AIItem(
                 name=name,
@@ -411,6 +543,9 @@ def _parse_scan_result(content: str) -> ScanResult:
                 tags=i.get("tags", []),
                 suggested_container=i.get("suggested_container"),
                 confidence_score=i.get("confidence_score", 1.0),
+                # Normalize snake_case → words; YOLO-World's CLIP matches phrases better.
+                detection_label=(i.get("detection_label") or "").replace("_", " ").strip() or None,
+                bbox=raw_bbox,
             )
         )
 

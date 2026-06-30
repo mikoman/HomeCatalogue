@@ -13,12 +13,13 @@ from app.models.house import House
 from app.schemas.settings import (
     AISettingsRead,
     AISettingsUpdate,
+    DetectorSettingsUpdate,
     AIModelInfo,
     AIModelsResponse,
     AIConnectionTest,
 )
 from app.services.ai_settings_store import load_settings, save_settings, settings_for_api
-from app.services.ai_models import list_models, test_connection
+from app.services.ai_models import list_models, test_connection, test_detector
 from app.runtime_env import running_in_docker
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -44,6 +45,28 @@ def update_ai_settings(data: AISettingsUpdate):
         stored[f"{provider}_embedding_model"] = data.embedding_model.strip()
     save_settings(stored)
     return settings_for_api()
+
+
+@router.put("/detector", response_model=AISettingsRead)
+def update_detector_settings(data: DetectorSettingsUpdate):
+    stored = load_settings()
+    stored["box_source"] = data.box_source
+    stored["detector_base_url"] = data.base_url.rstrip("/")
+    save_settings(stored)
+    return settings_for_api()
+
+
+@router.get("/detector/test", response_model=AIConnectionTest)
+async def test_detector_connection(base_url: str | None = Query(None)):
+    stored = load_settings()
+    base_url = (base_url or stored.get("detector_base_url") or "").rstrip("/")
+    result = await test_detector(base_url)
+    return AIConnectionTest(
+        provider="detector",
+        base_url=base_url,
+        running_in_docker=running_in_docker(),
+        **result,
+    )
 
 
 @router.get("/ai/models", response_model=AIModelsResponse)

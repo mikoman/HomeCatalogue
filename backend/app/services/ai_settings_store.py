@@ -32,6 +32,10 @@ def _defaults() -> dict:
         # Embedding models for semantic search (empty = keyword-only).
         "ollama_embedding_model": "",
         "lmstudio_embedding_model": "",
+        # Bounding-box source: "off" | "yolo" (detector sidecar) | "vlm" (model grounding).
+        "box_source": "off",
+        "detector_base_url": settings.detector_base_url,
+        "detector_enabled": False,  # legacy; migrated to box_source by get_box_source()
     }
 
 
@@ -118,6 +122,31 @@ def get_embedding_config() -> dict | None:
     return None
 
 
+_VALID_BOX_SOURCES = ("off", "yolo", "vlm")
+
+
+def get_box_source() -> str:
+    """Active bounding-box mode: 'off' | 'yolo' | 'vlm'.
+
+    Migrates the legacy detector_enabled bool: True → 'yolo', False → 'off'.
+    """
+    data = load_settings()
+    bs = data.get("box_source")
+    if bs in _VALID_BOX_SOURCES:
+        return bs
+    # Legacy fallback: detector_enabled True means the YOLO sidecar was on.
+    return "yolo" if data.get("detector_enabled") else "off"
+
+
+def get_detector_config() -> dict | None:
+    """Detector base_url when box_source is 'yolo', else None (scans skip detection)."""
+    if get_box_source() != "yolo":
+        return None
+    data = load_settings()
+    url = (data.get("detector_base_url") or settings.detector_base_url).rstrip("/")
+    return {"base_url": url}
+
+
 def settings_for_api() -> dict:
     data = load_settings()
     provider = data["provider"].lower()
@@ -136,6 +165,9 @@ def settings_for_api() -> dict:
         "lmstudio_base_url": data["lmstudio_base_url"],
         "lmstudio_model": data["lmstudio_model"],
         "lmstudio_embedding_model": data.get("lmstudio_embedding_model", ""),
+        "box_source": get_box_source(),
+        "detector_enabled": get_box_source() == "yolo",  # legacy mirror for old UIs
+        "detector_base_url": data.get("detector_base_url", settings.detector_base_url),
         "running_in_docker": running_in_docker(),
         "suggested_urls": suggested_provider_urls(provider),
         "suggested_urls_by_provider": {

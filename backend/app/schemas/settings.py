@@ -17,6 +17,9 @@ class AISettingsRead(BaseModel):
     lmstudio_base_url: str
     lmstudio_model: str
     lmstudio_embedding_model: str = ""
+    box_source: str = "off"
+    detector_enabled: bool = False  # legacy mirror of box_source == 'yolo'
+    detector_base_url: str = ""
     running_in_docker: bool
     suggested_urls: dict[str, str]
     suggested_urls_by_provider: dict[str, dict[str, str]]
@@ -27,6 +30,12 @@ class AISettingsUpdate(BaseModel):
     base_url: str
     model: str
     embedding_model: str | None = None
+
+
+class DetectorSettingsUpdate(BaseModel):
+    """Bounding-box source toggle + detector sidecar URL (YOLO-World only)."""
+    box_source: str = Field(..., pattern="^(off|yolo|vlm)$")
+    base_url: str = ""
 
 
 class AIModelInfo(BaseModel):
