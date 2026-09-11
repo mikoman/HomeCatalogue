@@ -3,8 +3,10 @@
 Home Catalogue is a self-hosted application for household inventory. It uses a vision model to identify objects in photographs.
 You review the suggestions before the application saves items and containers.
 
+**First installation?** Follow the [Docker quick start](#quick-start).
+
 Use Ollama, LM Studio, or oMLX for local inference. Local servers can use an optional API key.
-OpenRouter provides an optional cloud service. Cloud scans send photographs outside your machine and can incur charges.
+DeepSeek, OpenRouter, OpenAI, and Anthropic provide cloud inference. Cloud scans send photographs outside your machine and can incur charges.
 
 The catalogue uses this structure:
 
@@ -25,6 +27,9 @@ See the [model research](docs/model-research.md) for model comparisons and sourc
 - [Interface](#interface)
 - [Technology](#technology)
 - [Quick start](#quick-start)
+- [Docker commands](#docker-commands)
+- [Docker troubleshooting](#docker-troubleshooting)
+- [Provider settings](#provider-settings)
 - [AI providers](#ai-providers)
 - [Models for 32 GB RAM](#models-for-32-gb-ram)
 - [Bounding boxes](#bounding-boxes)
@@ -87,60 +92,298 @@ The style configuration is in [tailwind.config.js](frontend/tailwind.config.js) 
 
 ## Quick start
 
-Use one of these environments:
+Follow these steps for a first installation with Docker.
+Run commands in Terminal on macOS or Linux, or PowerShell on Windows.
 
-- Docker and Docker Compose, which are the recommended deployment tools.
-- Python 3.11 or later and Node.js 18 or later for a local development environment.
+Docker builds and runs the web app and backend. The backend creates the SQLite database automatically.
+You do not need Python, Node.js, or a separate database installation for this setup.
+AI model servers and the optional object detector run separately from these Docker containers.
 
-Photo scans also need a vision model or a cloud API key.
-The initial local model is `qwen3.5:9b`.
+### 1. Install the prerequisites
 
-### Configure the application
+1. Install [Docker Desktop](https://docs.docker.com/compose/install/) on macOS or Windows.
+2. Start Docker Desktop. Wait until its engine is running.
+3. Install [Git](https://git-scm.com/downloads) if you will use the clone command below.
 
-Run this command from the repository root:
+On Linux, use Docker Desktop or [Docker Engine with the Compose plugin](https://docs.docker.com/compose/install/linux/).
+Start the Docker service before continuing.
+On Windows, use Linux containers in Docker Desktop.
 
-```bash
-cp .env.example .env
+Check the installation:
+
+```sh
+docker --version
+docker compose version
+docker info
 ```
 
-The example configuration connects a Docker backend to Ollama through `host.docker.internal`.
-For cloud inference, complete the [OpenRouter setup](#openrouter) instead of starting a local model.
+The first two commands must show version numbers. `docker info` must show server information without a connection or permission error.
+Resolve Docker errors before continuing.
 
-### Start a local model
+You also need internet access for the initial image builds and any model downloads.
+Choose how you want to use the app:
 
-For Ollama, start the server if it is not already running:
-
-```bash
-ollama serve
-```
-
-Use a separate terminal to download the model:
-
-```bash
-ollama pull qwen3.5:9b
-```
-
-Ollama uses port `11434`.
-
-For LM Studio:
-
-1. Load a vision model.
-2. Enable the OpenAI-compatible API.
-3. Start the local server on port `1234`.
-
-### Start the application with Docker
-
-Run this command from the repository root:
-
-```bash
-docker compose up -d
-```
-
-| Service | Address |
+| Use | What you need before your first scan |
 |---|---|
-| Frontend | [localhost](http://localhost) |
-| Backend API | [localhost:8000](http://localhost:8000) |
-| Interactive API documentation | [localhost:8000/docs](http://localhost:8000/docs) |
+| Cloud scans | An account and API key for DeepSeek, OpenRouter, OpenAI, or Anthropic. The account needs access to a vision model. Charges can apply. |
+| Local scans | Ollama, LM Studio, or oMLX running on your computer, with an image-capable model installed. |
+| Manual catalogue | No AI service or API key. You can add items manually. |
+
+You can start the app before configuring AI. The cloud path does not require a local model server or GPU.
+
+### 2. Download the project
+
+Run:
+
+```sh
+git clone https://github.com/mikoman/HomeCatalogue.git homeCatalogue
+cd homeCatalogue
+```
+
+If you already downloaded the project, open a terminal in its folder instead.
+You can also use **Code → Download ZIP** on GitHub. Extract the ZIP before opening a terminal in the extracted folder.
+
+This folder must contain `docker-compose.yml`, `.env.example`, `backend/`, and `frontend/`.
+Run all Docker commands below from this folder, called the **repository root**.
+
+### 3. Create the configuration and storage folders
+
+For a new installation, copy the example configuration.
+Do not repeat the copy over an existing `.env` file.
+
+On macOS or Linux:
+
+```sh
+cp .env.example .env
+mkdir -p storage/uploads
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+New-Item -ItemType Directory -Force storage/uploads
+```
+
+Keep the filename exactly `.env`, including the leading dot. Do not save it as `.env.txt`.
+
+Open `.env` in a text editor. Clear the example OpenAI and Anthropic keys so those lines read:
+
+```dotenv
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+```
+
+You can leave the other copied values unchanged for the first Docker startup.
+Enter real provider keys through the app in step 5.
+The initial `AI_PROVIDER=ollama` does not prevent startup when Ollama is absent.
+
+Keep these Docker storage values:
+
+```dotenv
+DATABASE_URL=sqlite:////app/storage/home_catalogue.db
+UPLOAD_DIR=/app/storage/uploads
+AI_SETTINGS_FILE=/app/storage/ai_settings.json
+```
+
+The four slashes in the SQLite URL are intentional.
+Docker maps the repository's `storage/` folder to `/app/storage` inside the backend container.
+This folder retains your database, uploaded photos, and saved provider settings when containers restart or are replaced.
+
+### 4. Build and start Docker
+
+Check the configuration first. This command produces no output when the configuration is valid:
+
+```sh
+docker compose config --quiet
+```
+
+Build and start both services:
+
+```sh
+docker compose up --build -d --wait
+```
+
+The first build downloads dependencies and can take several minutes.
+`--build` builds the images. `-d` runs the containers in the background. `--wait` waits for running services and configured health checks.
+See Docker's [startup command reference](https://docs.docker.com/reference/cli/docker/compose/up/) for these options.
+
+Check the result:
+
+```sh
+docker compose ps
+```
+
+Expect `backend` to show **Up** and **healthy**, and `frontend` to show **Up**.
+If a service exits or remains unhealthy, use the [troubleshooting steps](#docker-troubleshooting).
+You can close the terminal after startup. Keep Docker running while you use the app.
+
+Open these addresses on the same computer:
+
+| Address | Expected result |
+|---|---|
+| [http://localhost](http://localhost) | The Home Catalogue interface. |
+| [http://localhost/api/health](http://localhost/api/health) | JSON containing `"status": "healthy"`. This also checks the frontend-to-backend connection. |
+| [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive backend API documentation. |
+
+Ports **80** and **8000** must be available on the host. See [port conflicts](#docker-troubleshooting) if either port is occupied.
+A healthy backend confirms that the app runs. It does not confirm that an AI model can process photos.
+
+### 5. Configure one AI provider
+
+Open **Settings → Providers and models** in the app.
+Choose one of the following paths. You can skip this step for manual catalogue entry.
+
+#### Use a cloud provider
+
+For DeepSeek:
+
+1. Select **DeepSeek**.
+2. Enter your [DeepSeek API key](https://platform.deepseek.com/api_keys).
+3. Select **Test connection**.
+4. Keep `deepseek-flash` in **Vision model**.
+5. Keep the initial **DeepSeek scan settings** for your first scan.
+6. Select **Save and use provider**.
+
+The **New scans use** header must now show **DeepSeek · deepseek-flash**.
+The saved key takes effect immediately. No Docker restart is necessary.
+See [DeepSeek settings](#deepseek) for image detail, thinking mode, and output limits.
+
+For another cloud provider, follow [OpenRouter](#openrouter) or [OpenAI and Anthropic](#direct-openai-and-anthropic-connections).
+Select an image-capable model. Cloud scans send photos and container context to that provider.
+
+#### Use a local model
+
+Install and start your chosen model server on the host computer.
+Docker Compose does not install Ollama, LM Studio, oMLX, or their models.
+
+For Ollama, install it from [ollama.com](https://ollama.com/download).
+Start the installed app or service.
+For a manual server, first confirm that Ollama is not already running.
+Run `ollama serve` in a separate terminal.
+
+Download the app's initial model:
+
+```sh
+ollama pull qwen3.5:9b
+ollama list
+```
+
+Wait for the download to finish. Confirm that `qwen3.5:9b` appears in the model list.
+Then configure Home Catalogue:
+
+1. Select **Ollama** under **Providers and models**.
+2. Set **Server URL** to `http://host.docker.internal:11434`.
+3. Select **Test connection**.
+4. Set **Vision model** to `qwen3.5:9b`.
+5. Select **Save and use provider**.
+
+Keep Ollama running while you scan.
+For LM Studio or oMLX, load a vision model and enable the server API before testing the connection.
+Use the [local provider URL table](#local-providers) for the server address.
+
+Inside the backend container, `localhost` refers to that container.
+Use `host.docker.internal` to reach a model server on the host computer.
+If the connection fails, see [local model connection problems](#docker-troubleshooting).
+
+### 6. Create your first catalogue and scan
+
+1. Open **Your catalogue**.
+2. Create a property and a room.
+3. Open the room.
+4. Upload one clear photo for the first scan.
+5. Wait for analysis to finish.
+6. Review the proposed items before saving them.
+
+Leave **Settings → Scans and boxes → No boxes** selected for the first scan.
+The separate object detector and embedding models are optional.
+Configure them later if you need object outlines or search by meaning.
+
+## Docker commands
+
+Run these commands from the repository root.
+Start Docker Desktop or the Docker service before running them.
+
+| Action | Command |
+|---|---|
+| Start the app again | `docker compose up -d --wait` |
+| Stop the app | `docker compose stop` |
+| Restart the current containers | `docker compose restart` |
+| Check service status | `docker compose ps` |
+| Read recent logs | `docker compose logs --tail=100 backend frontend` |
+| Follow new log messages | `docker compose logs -f backend frontend` |
+| Rebuild after code changes | `docker compose up --build -d --wait` |
+| Stop and remove the app containers | `docker compose down` |
+
+Press **Ctrl+C** to stop following logs. This leaves the containers running.
+Both `stop` and `down` preserve the repository's `storage/` folder.
+Keep that folder and `.env` when you update the app.
+
+### Apply changes to .env
+
+Changes saved through the app's Settings page apply immediately.
+After editing `.env`, recreate the containers to apply the new environment:
+
+```sh
+docker compose up -d --force-recreate --wait
+```
+
+As the [Docker restart reference](https://docs.docker.com/reference/cli/docker/compose/restart/) explains, a restart does not apply changed environment values.
+Saved provider settings override their corresponding environment values.
+Use **Use environment key** in Settings if you want to restore a provider's environment key.
+
+### Update an installation
+
+Back up your data before updating. See [Storage and backup](#storage-and-backup).
+For an installation downloaded with Git, run:
+
+```sh
+git pull --ff-only
+docker compose up --build -d --wait
+```
+
+If Git reports local changes or a branch conflict, resolve that issue before continuing.
+After startup, open the app and confirm that your catalogue is present.
+
+## Docker troubleshooting
+
+| Problem | What to check |
+|---|---|
+| `docker` is not found | Install Docker. Open a new terminal after installation. |
+| `docker compose` is unavailable | Install or update Docker Desktop, or install the Compose plugin on Linux. Use `docker compose` with a space. |
+| Cannot connect to the Docker daemon | Start Docker Desktop or the Linux Docker service. Check that `docker info` succeeds. |
+| Docker reports permission denied on Linux | Complete Docker's [Linux post-installation steps](https://docs.docker.com/engine/install/linux-postinstall/) for your user. |
+| Compose cannot find a configuration file | Change to the folder containing `docker-compose.yml`. |
+| Compose cannot find `.env` | Complete step 3 in the repository root. Check that the file is not named `.env.txt`. |
+| Port 80 is already allocated | Change the frontend mapping in `docker-compose.yml` from `"80:80"` to `"8080:80"`. Run the startup command again. Open `http://localhost:8080`. |
+| Port 8000 is already allocated | Change the backend mapping from `"8000:8000"` to `"8001:8000"`. Run the startup command again. API docs then use `http://localhost:8001/docs`. |
+| Docker Desktop denies a folder mount | Permit Docker Desktop to access the project folder. Check file-sharing permissions, especially for an external drive. |
+| The backend is unhealthy or the page returns 502 | Run `docker compose logs --tail=100 backend frontend`. Check the first startup error and storage permissions. |
+| New frontend changes do not appear | Rebuild with `docker compose up --build -d --wait`. Reload the browser page after the build finishes. |
+| A cloud connection works but a scan fails | Check the selected model's image support and the account balance. The connection test does not generate an image response. |
+
+Change only the number before the colon in a port mapping.
+The container ports and Nginx's internal backend address stay unchanged.
+If both host ports are occupied, apply both mapping changes before starting Docker.
+
+For a local model connection failure:
+
+1. Confirm that the model server is running on the host computer.
+2. Confirm that its model list contains the selected vision model.
+3. Use the Docker URL from the [local provider table](#local-providers).
+4. Check that the model server accepts connections from Docker.
+5. Retry **Test connection** in Home Catalogue.
+
+Ollama listens on `127.0.0.1` by default.
+If Docker cannot reach it, configure `OLLAMA_HOST=0.0.0.0:11434` in the Ollama process or service environment.
+Restart Ollama after that change. This setting belongs to Ollama, not Home Catalogue's `.env` file.
+Use Ollama's [platform-specific instructions](https://docs.ollama.com/faq#how-do-i-configure-ollama-server) for macOS, Windows, or Linux.
+This address allows network connections, so restrict access to a trusted network.
+For LM Studio or oMLX, check the server's network binding and firewall settings.
+
+Home Catalogue has no sign-in. Use it on a trusted network or behind an authenticated reverse proxy.
+
+## Provider settings
 
 ### Configure the backend in Settings
 
@@ -184,7 +427,7 @@ Connection tests send no photos and generate no inference output.
 A successful connection does not prove that the selected model can process a scan.
 
 Saved settings and keys apply without a restart.
-Environment changes require a backend restart.
+For Docker environment changes, [recreate the containers](#apply-changes-to-env).
 Install local models in Ollama, LM Studio, or oMLX before scanning.
 Settings connects to these servers. It does not install models or start their processes.
 
@@ -222,34 +465,6 @@ Home Catalogue has no sign-in. Use a trusted network or an authenticated reverse
 Anyone with access to the app can change settings and use configured providers.
 Use HTTPS when you access Settings across a network.
 
-### Start a local development environment
-
-Use separate terminals for the backend and frontend.
-Run each sequence from the repository root.
-
-Start the backend:
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-On Windows, use `venv\Scripts\activate` to activate the Python environment.
-
-Start the frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The frontend uses `http://localhost:5173` and forwards API requests to the backend.
-Use `localhost` addresses for local model servers in Settings.
-
 ## AI providers
 
 A vision-language model (VLM) processes an image and produces text.
@@ -284,7 +499,7 @@ To configure DeepSeek:
 6. Select **Save and use provider**.
 
 You can also set `DEEPSEEK_API_KEY` and `DEEPSEEK_MODEL` in the backend environment.
-Restart the backend after environment changes. A saved key overrides the environment key.
+For Docker environment changes, [recreate the containers](#apply-changes-to-env). A saved key overrides the environment key.
 DeepSeek uses the existing key replacement, removal, and environment restoration controls.
 
 The app sends JPEG images as base64 data URLs to `https://api.deepseek.com/chat/completions`.
@@ -325,8 +540,7 @@ To configure OpenRouter:
 7. Select **Save and use provider**.
 
 You can also supply `OPENROUTER_API_KEY` through the backend environment.
-Restart the backend after an environment change.
-For Compose, use `docker compose up -d --force-recreate backend`.
+For Docker environment changes, [recreate the containers](#apply-changes-to-env).
 A saved key overrides the environment key.
 See [API key storage](#store-and-replace-api-keys) for replacement and removal.
 
@@ -857,15 +1071,23 @@ New uploads use JPEG format, normalized orientation, and no original metadata.
 storage/uploads/{scan_session_id}_{upload_file_id}.jpg
 ```
 
-| Data | Copy command |
-|---|---|
-| SQLite database | `cp storage/home_catalogue.db backup/` |
-| Images, settings, and database | `tar -czf storage-backup.tar.gz storage/` |
-| Docker storage | `docker compose run --rm backend cp -r /app/storage /data/` |
+For a Docker installation, stop the app before copying the database.
+Run these commands from the repository root:
 
-Stop database writes before copying the database file.
-Create the `backup/` directory before using the database copy command.
-The Docker command requires a persistent directory mounted at `/data`.
+```sh
+docker compose stop
+```
+
+Copy the complete `storage/` folder and `.env` to a separate backup location.
+Use a new dated folder for each backup. Keep the previous backup until you check the new copy.
+The `storage/` folder includes the database, photos, and saved provider keys.
+Protect the backup because it can contain API keys.
+
+Start the app after the copy finishes:
+
+```sh
+docker compose up -d --wait
+```
 
 ## Development
 
@@ -877,6 +1099,61 @@ The AI dispatch function is in `ai_vision.py`.
 `ai_settings_store.py` manages runtime provider settings.
 Background tasks retain scan state in `ScanSession` records.
 The frontend requests `GET /api/scan/{id}` to monitor progress.
+
+### Start a local development environment
+
+This alternative runs the backend and frontend without Docker.
+It requires Python 3.12 and Node.js 20 or later. The Docker installation above does not require these host tools.
+Stop the Docker installation before using this workflow. Both workflows use the same database and port 8000.
+
+Create `storage/uploads/` in the repository root if it does not exist.
+Create a separate `backend/.env` file with these values:
+
+```dotenv
+AI_PROVIDER=ollama
+DATABASE_URL=sqlite:///../storage/home_catalogue.db
+UPLOAD_DIR=../storage/uploads
+AI_SETTINGS_FILE=../storage/ai_settings.json
+OLLAMA_BASE_URL=http://localhost:11434
+RUNNING_IN_DOCKER=0
+```
+
+These paths assume that you start the backend from `backend/`.
+Keep the root `.env` file for Docker. Its `/app/storage` paths do not apply to this workflow.
+
+Use separate terminals for the backend and frontend.
+Run each sequence from the repository root.
+
+Start the backend on macOS or Linux:
+
+```bash
+cd backend
+python3.12 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+On Windows PowerShell, use this backend sequence:
+
+```powershell
+cd backend
+py -3.12 -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+The frontend uses `http://localhost:5173` and forwards API requests to the backend.
+Use `localhost` addresses for local model servers in Settings.
 
 ### Validation
 
@@ -924,7 +1201,7 @@ Set detector variables in the separate detector process environment.
 | Variable | Default | Purpose |
 |---|---|---|
 | `AI_PROVIDER` | `ollama` | Select `ollama`, `lmstudio`, `openrouter`, `deepseek`, `openai`, `anthropic`, or `omlx`. |
-| `OPENROUTER_API_KEY` | Empty | OpenRouter key on the backend. Restart the backend after changing it. |
+| `OPENROUTER_API_KEY` | Empty | OpenRouter key on the backend. Recreate Docker containers after environment changes. |
 | `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | Initial OpenRouter model. Settings overrides it. |
 | `DEEPSEEK_API_KEY` | Empty | DeepSeek key on the backend. A saved key overrides it. |
 | `DEEPSEEK_MODEL` | `deepseek-flash` | Initial DeepSeek vision model. Settings overrides it. |
