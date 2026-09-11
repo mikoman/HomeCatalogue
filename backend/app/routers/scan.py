@@ -153,6 +153,10 @@ async def _run_scan(
 
 def _scan_error_message(exc: Exception) -> str:
     """Return a useful error without exposing provider keys or request headers."""
+    from app.services.openrouter import OpenRouterError
+
+    if isinstance(exc, OpenRouterError):
+        return str(exc)
     name = type(exc).__name__
     if name in {"AuthenticationError", "PermissionDeniedError"}:
         return "The AI service rejected its credentials. Check the provider settings, then retry."

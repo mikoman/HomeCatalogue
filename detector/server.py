@@ -1,10 +1,6 @@
-"""YOLO-World detector sidecar — open-vocabulary boxes for the scan pipeline.
+"""YOLOE and YOLO-World detection with text prompts and normalized boxes.
 
-Runs on the host (picks up Apple-Silicon MPS / CUDA automatically). The backend
-calls /detect over HTTP with the VLM-derived class list and gets boxes back
-normalized to 0..1, so image resolution / downscaling is irrelevant downstream.
-
-Run:  pip install -r requirements.txt && uvicorn server:app --port 8077
+Run the sidecar on the host to use CUDA. CPU is the portable default.
 """
 
 import base64
@@ -14,14 +10,16 @@ import threading
 
 import torch
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from PIL import Image
-from ultralytics import YOLOWorld
+from ultralytics import YOLOE, YOLOWorld
 
-# Large open-vocab model — much better recall on household items than -s; slower on
-# CPU (a few seconds/image, fine vs the VLM). Use yolov8s-worldv2.pt for speed.
-MODEL_NAME = os.getenv("DETECTOR_MODEL", "yolov8x-worldv2.pt")
-DEFAULT_CONF = float(os.getenv("DETECTOR_CONF", "0.1"))
+MODEL_NAME = os.getenv("DETECTOR_MODEL", "yoloe-26s-seg.pt")
+DEFAULT_CONF = float(os.getenv("DETECTOR_CONF", "0.25"))
+IMAGE_SIZE = int(os.getenv("DETECTOR_IMGSZ", "960"))
+IS_YOLOE = os.path.basename(MODEL_NAME).lower().startswith("yoloe")
+if IS_YOLOE and "-pf" in MODEL_NAME.lower():
+    raise ValueError("Use text-prompt YOLOE weights. Prompt-free weights do not accept item labels.")
 
 
 def _auto_device() -> str:
@@ -36,30 +34,36 @@ def _auto_device() -> str:
 
 DEVICE = os.getenv("DETECTOR_DEVICE") or _auto_device()
 
-model = YOLOWorld(MODEL_NAME)  # weights auto-download on first run
+model = YOLOE(MODEL_NAME) if IS_YOLOE else YOLOWorld(MODEL_NAME)
 # set_classes mutates the model in place, so serialize concurrent scans.
-# ponytail: one global lock; fine at one detect per scan, shard if throughput grows.
 _lock = threading.Lock()
+
+
+def _set_classes(classes: list[str]) -> None:
+    if IS_YOLOE:
+        model.set_classes(classes, model.get_text_pe(classes))
+    else:
+        model.set_classes(classes)
 
 # Warm the open-vocab text encoder at boot (it downloads on the first set_classes),
 # so the first real scan isn't slow. Best-effort — never block startup on it.
 try:
-    model.set_classes(["object"])
+    _set_classes(["object"])
 except Exception:  # noqa: BLE001
     pass
 
-app = FastAPI(title="YOLO-World detector")
+app = FastAPI(title="Home Catalogue detector")
 
 
 class DetectRequest(BaseModel):
     image_b64: str
     classes: list[str]
-    conf: float | None = None
+    conf: float | None = Field(default=None, ge=0, le=1)
 
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": MODEL_NAME, "device": DEVICE}
+    return {"ok": True, "model": MODEL_NAME, "device": DEVICE, "family": "yoloe" if IS_YOLOE else "yolo-world", "imgsz": IMAGE_SIZE}
 
 
 @app.post("/detect")
@@ -69,8 +73,11 @@ def detect(req: DetectRequest):
         return {"detections": []}
     img = Image.open(io.BytesIO(base64.b64decode(req.image_b64))).convert("RGB")
     with _lock:
-        model.set_classes(req.classes)
-        results = model.predict(img, conf=req.conf or DEFAULT_CONF, device=DEVICE, verbose=False)
+        _set_classes(req.classes)
+        results = model.predict(
+            img, conf=DEFAULT_CONF if req.conf is None else req.conf,
+            imgsz=IMAGE_SIZE, device=DEVICE, verbose=False,
+        )
 
     detections = []
     for r in results:

@@ -27,5 +27,6 @@ storage/uploads/*
 *.log
 .gitnexus/
 *.pt
+detector/mobileclip*.ts
 .gitnexus
 .claude

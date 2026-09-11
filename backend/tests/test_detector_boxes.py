@@ -4,7 +4,7 @@ import io
 
 from PIL import Image
 
-from app.services.ai_vision import _associate, _capped_jpeg_bytes
+from app.services.ai_vision import _associate, _capped_jpeg_bytes, _normalize_bbox
 from app.schemas.scan import AIItem
 from app.config import settings
 
@@ -69,3 +69,11 @@ def test_capped_jpeg_leaves_small_images_untouched(tmp_path):
     Image.new("RGB", (300, 200), "white").save(src)
     out = Image.open(io.BytesIO(_capped_jpeg_bytes(str(src))))
     assert out.size == (300, 200)
+
+
+def test_explicit_grounding_coordinates_do_not_guess_units_from_box_size():
+    assert _normalize_bbox([0, 0, 1, 1], 0, 0, coordinate_space="normalized_1000") == [0, 0, 0.001, 0.001]
+    assert _normalize_bbox([100, 200, 800, 900], 0, 0, coordinate_space="normalized_1000") == [0.1, 0.2, 0.8, 0.9]
+    assert _normalize_bbox([0, 0, 1200, 900], 2000, 1000, coordinate_space="normalized_1000") is None
+    assert _normalize_bbox([0, 0, float("nan"), 900], 0, 0, coordinate_space="normalized_1000") is None
+    assert _normalize_bbox(None, 0, 0, coordinate_space="normalized_1000") is None

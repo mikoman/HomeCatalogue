@@ -21,6 +21,7 @@ from app.schemas.settings import (
 from app.services.ai_settings_store import load_settings, save_settings, settings_for_api
 from app.services.ai_models import list_models, test_connection, test_detector
 from app.runtime_env import running_in_docker
+from app.services.openrouter import OPENROUTER_BASE_URL
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -38,10 +39,16 @@ def update_ai_settings(data: AISettingsUpdate):
     if provider == "ollama":
         stored["ollama_base_url"] = data.base_url.rstrip("/")
         stored["ollama_model"] = data.model
-    else:
+    elif provider == "lmstudio":
         stored["lmstudio_base_url"] = data.base_url.rstrip("/")
         stored["lmstudio_model"] = data.model
-    if data.embedding_model is not None:
+    else:
+        if not config.openrouter_api_key.strip():
+            raise HTTPException(status_code=400, detail="Set OPENROUTER_API_KEY on the backend before selecting OpenRouter.")
+        stored["openrouter_model"] = data.model.strip()
+    if not data.model.strip():
+        raise HTTPException(status_code=400, detail="Select a model before saving.")
+    if data.embedding_model is not None and provider in {"ollama", "lmstudio"}:
         stored[f"{provider}_embedding_model"] = data.embedding_model.strip()
     save_settings(stored)
     return settings_for_api()
@@ -71,10 +78,12 @@ async def test_detector_connection(base_url: str | None = Query(None)):
 
 @router.get("/ai/models", response_model=AIModelsResponse)
 async def get_ai_models(
-    provider: str = Query(..., pattern="^(ollama|lmstudio)$"),
+    provider: str = Query(..., pattern="^(ollama|lmstudio|openrouter)$"),
     base_url: str | None = Query(None),
 ):
     stored = load_settings()
+    if provider == "openrouter":
+        base_url = OPENROUTER_BASE_URL
     if base_url is None:
         base_url = (
             stored["ollama_base_url"]
@@ -93,10 +102,12 @@ async def get_ai_models(
 
 @router.get("/ai/test", response_model=AIConnectionTest)
 async def test_ai_connection(
-    provider: str = Query(..., pattern="^(ollama|lmstudio)$"),
+    provider: str = Query(..., pattern="^(ollama|lmstudio|openrouter)$"),
     base_url: str | None = Query(None),
 ):
     stored = load_settings()
+    if provider == "openrouter":
+        base_url = OPENROUTER_BASE_URL
     if base_url is None:
         base_url = (
             stored["ollama_base_url"]

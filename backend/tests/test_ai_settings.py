@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.config import settings
+from app.config import Settings, settings
 from app.schemas.settings import AISettingsRead, DetectorSettingsUpdate
 from app.services import ai_settings_store as store
 from app.routers.settings import update_detector_settings
@@ -76,3 +76,14 @@ def test_settings_replace_failure_preserves_the_previous_file(settings_file, mon
 def test_legacy_detector_choice_is_preserved(settings_file):
     settings_file.write_text(json.dumps({"detector_enabled": True}))
     assert store.get_box_source() == "yolo"
+
+
+def test_environment_file_accepts_cors_and_shared_runtime_variables(tmp_path, monkeypatch):
+    for name in ("CORS_ORIGINS", "OPENROUTER_API_KEY", "OPENROUTER_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    path = tmp_path / "example.env"
+    path.write_text("CORS_ORIGINS=http://localhost:5173,http://localhost\nOPENROUTER_API_KEY=test-only\nOPENROUTER_MODEL=vision\nAI_SETTINGS_FILE=/tmp/example.json\nRUNNING_IN_DOCKER=1\n")
+    config = Settings(_env_file=path)
+    assert config.cors_origins == ["http://localhost:5173", "http://localhost"]
+    assert config.openrouter_api_key == "test-only"
+    assert config.openrouter_model == "vision"

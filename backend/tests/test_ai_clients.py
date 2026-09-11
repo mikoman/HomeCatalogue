@@ -2,9 +2,11 @@
 
 import asyncio
 import sys
+import json
 from types import SimpleNamespace
 
 import pytest
+import httpx
 
 from app.services import ai_vision
 
@@ -62,3 +64,21 @@ def test_invalid_inventory_uses_the_existing_repair_attempt(monkeypatch):
     result = asyncio.run(ai_vision.process_image_with_ai("photo.jpg", 1))
     assert result.items == []
     assert len(calls) == 2
+
+
+def test_ollama_uses_bounded_context_and_rejects_truncated_json(monkeypatch):
+    monkeypatch.setattr(ai_vision, "_encode_image", lambda _: "photo")
+    monkeypatch.setattr(ai_vision, "get_effective_ai_config", lambda: {"base_url": "http://ollama", "model": "qwen3.5:9b"})
+
+    def handler(request):
+        body = json.loads(request.content)
+        assert body["think"] is False
+        assert body["options"]["num_ctx"] == ai_vision.settings.ollama_num_ctx
+        assert body["options"]["num_predict"] == ai_vision.settings.scan_max_tokens
+        assert body["format"]["required"] == ["items"]
+        return httpx.Response(200, json={"done_reason": "length", "message": {"content": '{"items":[]}'}})
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(handler), **kwargs))
+    with pytest.raises(ValueError, match="truncated"):
+        asyncio.run(ai_vision._process_ollama("photo.jpg", "system", "user"))

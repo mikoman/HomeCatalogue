@@ -5,6 +5,7 @@ import Modal from './Modal';
 const PROVIDERS = [
   { id: 'ollama', label: 'Ollama' },
   { id: 'lmstudio', label: 'LM Studio' },
+  { id: 'openrouter', label: 'OpenRouter · cloud' },
 ];
 
 export default function Settings() {
@@ -16,6 +17,7 @@ export default function Settings() {
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
   const [embeddingModel, setEmbeddingModel] = useState('');
+  const [openrouterConfigured, setOpenrouterConfigured] = useState(false);
   const [storedUrls, setStoredUrls] = useState({ ollama: '', lmstudio: '' });
   const [storedModels, setStoredModels] = useState({ ollama: '', lmstudio: '' });
   const [storedEmbeddingModels, setStoredEmbeddingModels] = useState({ ollama: '', lmstudio: '' });
@@ -77,6 +79,7 @@ export default function Settings() {
         setBaseUrl(data.base_url);
         setModel(data.model);
         setEmbeddingModel(data.embedding_model || '');
+        setOpenrouterConfigured(!!data.openrouter_configured);
         setStoredEmbeddingModels({
           ollama: data.ollama_embedding_model || '',
           lmstudio: data.lmstudio_embedding_model || '',
@@ -87,10 +90,12 @@ export default function Settings() {
         setStoredUrls({
           ollama: data.ollama_base_url,
           lmstudio: data.lmstudio_base_url,
+          openrouter: data.openrouter_base_url,
         });
         setStoredModels({
           ollama: data.ollama_model,
           lmstudio: data.lmstudio_model,
+          openrouter: data.openrouter_model,
         });
         setBoxSource(data.box_source || (data.detector_enabled ? 'yolo' : 'off'));
         setDetectorUrl(data.detector_base_url || '');
@@ -257,9 +262,9 @@ export default function Settings() {
         </p>
       </header>
 
-      {effectiveProvider && <p className="text-sm text-surface-300 break-words">Scans currently use <strong className="text-surface-100">{effectiveProvider}</strong>{effectiveModel ? ` · ${effectiveModel}` : ''}.{!PROVIDERS.some(value => value.id === effectiveProvider) && ' Saving a local provider below will switch new scans to that provider.'}</p>}
+      {effectiveProvider && <p className="text-sm text-surface-300 break-words">Scans currently use <strong className="text-surface-100">{effectiveProvider}</strong>{effectiveModel ? ` · ${effectiveModel}` : ''}.{!PROVIDERS.some(value => value.id === effectiveProvider) && ' Saving a provider below will switch new scans to that provider.'}</p>}
 
-      {runningInDocker && (
+      {runningInDocker && provider !== 'openrouter' && (
         <div className="card border-primary-900/50 bg-primary-950/20 py-3 px-4">
           <p className="text-primary-400 text-sm font-medium">Backend is running in Docker</p>
           <p className="text-surface-400 text-xs mt-1">
@@ -300,7 +305,7 @@ export default function Settings() {
           <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-2">
             Provider
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {PROVIDERS.map(p => (
               <button
                 key={p.id}
@@ -319,6 +324,16 @@ export default function Settings() {
             ))}
           </div>
         </div>
+
+        {provider === 'openrouter' && (
+          <div className="text-sm text-surface-300 space-y-2" role="status">
+            <p>OpenRouter sends scan photos and container context to a cloud model. Usage can incur charges.</p>
+            <p>{openrouterConfigured
+              ? 'The backend has an API key. Test the connection before saving.'
+              : 'Set OPENROUTER_API_KEY on the backend, then restart the backend. The API key stays on the server.'}</p>
+            <p className="text-xs text-surface-500">Keyword search remains available. Local semantic search resumes when you select its local provider again.</p>
+          </div>
+        )}
 
         <div>
           <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
@@ -356,6 +371,7 @@ export default function Settings() {
               aria-label="Server URL"
               required
               disabled={saving}
+              readOnly={provider === 'openrouter'}
               value={baseUrl}
               onChange={(e) => { setBaseUrl(e.target.value); setSaved(false); setTestResult(null); modelRequest.current += 1; connectionRequest.current += 1; setModels([]); setLoadingModels(false); setTesting(false); }}
               placeholder={runningInDocker ? suggestedUrls.docker : suggestedUrls.local}
@@ -379,7 +395,9 @@ export default function Settings() {
             </button>
           </div>
           <p className="text-xs text-surface-500 mt-1.5">
-            {runningInDocker
+            {provider === 'openrouter'
+              ? 'OpenRouter uses its fixed HTTPS endpoint. Load models lists image models with structured outputs.'
+              : runningInDocker
               ? 'From Docker, point at host.docker.internal (not localhost).'
               : 'Running locally — localhost URLs are fine.'}
           </p>
@@ -401,6 +419,7 @@ export default function Settings() {
               className="input-field text-sm w-full"
             >
               <option value="">Select a model…</option>
+              {model && !models.some(value => value.id === model) && <option value={model}>{model} · saved model, unavailable in this list</option>}
               {models.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
@@ -412,16 +431,22 @@ export default function Settings() {
               disabled={saving}
               value={model}
               onChange={(e) => { setModel(e.target.value); setSaved(false); }}
-              placeholder={provider === 'ollama' ? 'e.g. llava' : 'Model id from LM Studio'}
+              placeholder={provider === 'ollama' ? 'e.g. qwen3.5:9b' : provider === 'openrouter' ? 'e.g. google/gemini-3.8-flash' : 'Model id from LM Studio'}
               className="input-field text-sm w-full"
             />
           )}
           <p className="text-xs text-surface-500 mt-1.5">
-            Use a vision-capable model (e.g. llava, qwen2-vl) for photo scanning.
+            {provider === 'openrouter'
+              ? 'Start with google/gemini-3.8-flash. Compare qwen/qwen3.8-27b for difficult photos. Availability and prices can change.'
+              : 'For 32 GB RAM, start with Qwen3.5 9B at 4-bit precision. Compare Qwen3.8 27B at 4-bit precision for quality.'}
           </p>
+          {provider !== 'openrouter' && <p className="text-xs text-surface-500 mt-2">
+            Ollama tags: qwen3.5:9b (6.6 GB), qwen3.8:27b (18 GB), qwen3-vl:8b (6.1 GB, grounding alternative).
+            Downloads exclude runtime memory. Start with one scan at a time. LM Studio uses the model ID from its server.
+          </p>}
         </div>
 
-        <details className="pt-3 border-t border-surface-800 space-y-3">
+        {provider !== 'openrouter' && <details className="pt-3 border-t border-surface-800 space-y-3">
           <summary className="cursor-pointer text-sm text-surface-300 py-2">Optional: search by meaning</summary>
           <div>
             <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
@@ -455,9 +480,9 @@ export default function Settings() {
             )}
           </div>
           <p className="text-xs text-surface-500">Save settings first, then reindex so existing items become searchable by meaning.</p>
-        </details>
+        </details>}
 
-        <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
+        <button type="submit" disabled={saving || (provider === 'openrouter' && !openrouterConfigured)} className="btn-primary w-full sm:w-auto">
           {saving ? 'Saving…' : 'Save settings'}
         </button>
       </form>
@@ -473,7 +498,7 @@ export default function Settings() {
         <div className="grid grid-cols-3 gap-2">
           {[
             { id: 'off', label: 'Off', hint: 'No boxes' },
-            { id: 'yolo', label: 'YOLO-World', hint: 'Sidecar detector' },
+            { id: 'yolo', label: 'Detector', hint: 'YOLOE / World' },
             { id: 'vlm', label: 'VLM', hint: 'Qwen grounding' },
           ].map(opt => (
             <button
@@ -519,14 +544,15 @@ export default function Settings() {
               </button>
             </div>
             <p className="text-xs text-surface-500 mt-1.5">
-              Run the sidecar from <code className="text-surface-300">detector/</code>; it adds a little time per scan.
+              Run the sidecar from <code className="text-surface-300">detector/</code>. Use YOLOE-26 for text-prompted boxes. YOLO-World remains supported.
             </p>
           </div>
         )}
 
         {boxSource === 'vlm' && (
           <p className="text-xs text-surface-500">
-            The vision model draws boxes itself — no sidecar needed. Best with Qwen3-VL or similar grounding-capable models.
+            The vision model supplies boxes in one pass. Compare Qwen3.8 or Qwen3-VL on your photos.
+            Check small objects and repeated items during review. A box is a model estimate.
           </p>
         )}
 

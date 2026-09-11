@@ -19,6 +19,9 @@ class AISettingsRead(BaseModel):
     lmstudio_base_url: str
     lmstudio_model: str
     lmstudio_embedding_model: str = ""
+    openrouter_base_url: str
+    openrouter_model: str
+    openrouter_configured: bool = False
     box_source: str = "off"
     detector_enabled: bool = False  # legacy mirror of box_source == 'yolo'
     detector_base_url: str = ""
@@ -28,14 +31,14 @@ class AISettingsRead(BaseModel):
 
 
 class AISettingsUpdate(BaseModel):
-    provider: str = Field(..., pattern="^(ollama|lmstudio)$")
+    provider: str = Field(..., pattern="^(ollama|lmstudio|openrouter)$")
     base_url: str
-    model: str
+    model: str = Field(..., min_length=1, max_length=255)
     embedding_model: str | None = None
 
 
 class DetectorSettingsUpdate(BaseModel):
-    """Bounding-box source toggle + detector sidecar URL (YOLO-World only)."""
+    """Bounding-box source and the local detector URL."""
     box_source: str = Field(..., pattern="^(off|yolo|vlm)$")
     base_url: str = ""
 

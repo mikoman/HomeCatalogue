@@ -4,12 +4,14 @@ import json
 import base64
 import io
 import math
+from copy import deepcopy
 from pathlib import Path
 from PIL import Image, ImageOps
 from starlette.concurrency import run_in_threadpool
 from app.config import settings
 from app.services.ai_settings_store import get_effective_ai_config, get_box_source
 from app.services.detector import detect_boxes
+from app.services import openrouter
 from app.schemas.scan import ScanResult, AIItem, AIContainer
 
 
@@ -57,7 +59,7 @@ JSON_SCHEMA = {
           "suggested_container": { "type": "string" },
           "confidence_score": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
           "detection_label": { "type": "string" },
-          "bbox": { "type": "array", "items": { "type": "number" } }
+          "bbox": { "type": ["array", "null"], "items": { "type": "number" }, "minItems": 4, "maxItems": 4 }
         },
         "required": ["name"],
         "additionalProperties": False
@@ -110,21 +112,20 @@ async def process_image_with_ai(
     system_prompt = _build_system_prompt(existing_containers, target_container)
     user_prompt = _build_user_prompt(target_container)
 
-    # VLM grounding: ask the model for boxes directly. Qwen-VL natively
-    # outputs 0–1000 normalized coordinates, so we ask in that space and
-    # convert to 0..1 in _normalize_bbox. No second model, no label matching.
-    vlm_w = vlm_h = 0
+    # Use one explicit coordinate contract for every provider.
     if box_source == "vlm":
-        with Image.open(io.BytesIO(await run_in_threadpool(_capped_jpeg_bytes, image_path))) as im:
-            vlm_w, vlm_h = im.size
         user_prompt += (
-            f"\n\nFor EVERY item also include \"bbox\": [x1, y1, x2, y2] — its "
-            f"bounding box in normalized coordinates where 0 is the top/left "
-            f"edge and 1000 is the bottom/right edge of the image."
+            '\n\nInclude "bbox": [x1, y1, x2, y2] for each item that you can locate. '
+            'Use coordinates from 0 to 1000 on each axis. '
+            'x runs from left to right. y runs from top to bottom. '
+            'Use the top-left corner first and the bottom-right corner second. '
+            'Enclose only that object. Return null when its location is unclear. '
+            'Give identical objects separate boxes. Do not return pixels or coordinates from 0 to 1.'
         )
 
     dispatch = {
         "openai": _process_openai,
+        "openrouter": _process_openrouter,
         "anthropic": _process_anthropic,
         "ollama": _process_ollama,
         "lmstudio": _process_lmstudio,
@@ -148,7 +149,7 @@ async def process_image_with_ai(
 
     if box_source == "vlm":
         for it in result.items:
-            it.bbox = _normalize_bbox(it.bbox, vlm_w, vlm_h)
+            it.bbox = _normalize_bbox(it.bbox, 0, 0, coordinate_space="normalized_1000")
     elif box_source == "yolo":
         # The detector is the source of truth — drop any boxes the model emitted.
         for it in result.items:
@@ -221,17 +222,12 @@ def _encode_image(image_path: str) -> str:
     return base64.b64encode(_capped_jpeg_bytes(image_path)).decode("utf-8")
 
 
-def _normalize_bbox(box, w: int, h: int) -> list[float] | None:
-    """Normalize a VLM-returned bbox to [x1,y1,x2,y2] in 0..1.
+def _normalize_bbox(box, w: int, h: int, *, coordinate_space: str = "auto") -> list[float] | None:
+    """Convert a box to normalized [x1, y1, x2, y2] coordinates.
 
-    Qwen-VL natively outputs coordinates in 0–1000 normalized space. Some
-    models may return 0..1 floats or absolute pixels instead, so we detect
-    the scale heuristically:
-      - all values ≤ 1.5  → already 0..1
-      - all values ≤ 1000 → 0–1000 normalized (Qwen-VL native)
-      - any value > 1000  → absolute pixels of the (w,h) image
-
-    Tolerates reversed corners; drops degenerate/parse-failed boxes.
+    New scans use the explicit normalized_1000 contract. The auto option keeps
+    the previous helper behavior for callers that supply image dimensions.
+    Reject invalid boxes. Accept reversed corners.
     """
     if not (isinstance(box, list) and len(box) == 4):
         return None
@@ -242,7 +238,11 @@ def _normalize_bbox(box, w: int, h: int) -> list[float] | None:
     if not all(math.isfinite(value) for value in (x1, y1, x2, y2)):
         return None
     abs_max = max(abs(x1), abs(y1), abs(x2), abs(y2))
-    if abs_max <= 1.5:          # already 0..1
+    if coordinate_space == "normalized_1000":
+        if any(value < 0 or value > 1000 for value in (x1, y1, x2, y2)):
+            return None
+        sx = sy = 1.0 / 1000.0
+    elif abs_max <= 1.5:          # already 0..1
         sx = sy = 1.0
     elif abs_max <= 1000:       # Qwen-VL 0–1000 normalized
         sx = sy = 1.0 / 1000.0
@@ -380,7 +380,7 @@ async def _process_anthropic(image_path: str, system_prompt: str, user_prompt: s
 
 
 async def _process_ollama(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
-    """Process image using a local Ollama vision model (e.g. llava, qwen3-vl)."""
+    """Process an image with a local Ollama vision model."""
     import httpx
 
     image_b64 = await run_in_threadpool(_encode_image, image_path)
@@ -413,11 +413,57 @@ async def _process_ollama(image_path: str, system_prompt: str, user_prompt: str)
                 ],
                 "stream": False,
                 "format": JSON_SCHEMA,
+                "think": False,
+                "options": {
+                    "num_ctx": settings.ollama_num_ctx,
+                    "num_predict": settings.scan_max_tokens,
+                    "temperature": 0.1,
+                },
             },
         )
     response.raise_for_status()
     data = response.json()
+    if data.get("done_reason") == "length":
+        raise ValueError("Ollama truncated the inventory. Increase SCAN_MAX_TOKENS or scan a smaller area.")
     content = data.get("message", {}).get("content", "{}")
+    return _parse_scan_result(content)
+
+
+def _strict_scan_schema() -> dict:
+    """Require every field for strict output. Optional values can be null."""
+    schema = deepcopy(JSON_SCHEMA)
+    schema["required"] = list(schema["properties"])
+    for array in schema["properties"].values():
+        entry = array["items"]
+        original_required = entry["required"]
+        for name, field in entry["properties"].items():
+            if name not in original_required and isinstance(field["type"], str):
+                field["type"] = [field["type"], "null"]
+        entry["required"] = list(entry["properties"])
+    return schema
+
+
+async def _process_openrouter(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
+    """Analyze an image through OpenRouter with a strict inventory schema."""
+    ai = get_effective_ai_config()
+    image_b64 = await run_in_threadpool(_encode_image, image_path)
+    content = await openrouter.complete({
+        "model": ai["model"],
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [
+                {"type": "text", "text": user_prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
+            ]},
+        ],
+        "stream": False,
+        "max_tokens": settings.scan_max_tokens,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "scan_result", "strict": True, "schema": _strict_scan_schema()},
+        },
+        "provider": {"require_parameters": True, "data_collection": "deny"},
+    })
     return _parse_scan_result(content)
 
 

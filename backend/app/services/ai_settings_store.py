@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from app.config import settings
 from app.runtime_env import default_provider_url, running_in_docker, suggested_provider_urls
+from app.services.openrouter import OPENROUTER_BASE_URL
 
 
 def _settings_path() -> Path:
@@ -19,7 +20,7 @@ def _settings_path() -> Path:
 
 
 SETTINGS_FILE = _settings_path()
-_PROVIDERS = {"ollama", "lmstudio", "openai", "anthropic", "omlx"}
+_PROVIDERS = {"ollama", "lmstudio", "openai", "anthropic", "omlx", "openrouter"}
 
 
 def _defaults() -> dict:
@@ -31,6 +32,7 @@ def _defaults() -> dict:
         "ollama_model": settings.ollama_model,
         "lmstudio_base_url": settings.lmstudio_base_url or default_provider_url("lmstudio"),
         "lmstudio_model": settings.lmstudio_model,
+        "openrouter_model": settings.openrouter_model,
         # Embedding models for semantic search (empty = keyword-only).
         "ollama_embedding_model": "",
         "lmstudio_embedding_model": "",
@@ -80,6 +82,12 @@ def get_effective_ai_config() -> dict:
     """Return provider, base_url, and model for the active scan configuration."""
     data = load_settings()
     provider = data["provider"].lower()
+    if provider == "openrouter":
+        return {
+            "provider": provider,
+            "base_url": OPENROUTER_BASE_URL,
+            "model": data["openrouter_model"],
+        }
     if provider == "ollama":
         return {
             "provider": "ollama",
@@ -169,12 +177,14 @@ def settings_for_api() -> dict:
     data = load_settings()
     provider = data["provider"].lower()
     effective = get_effective_ai_config()
-    if provider not in {"ollama", "lmstudio"}:
+    if provider not in {"ollama", "lmstudio", "openrouter"}:
         provider = "ollama"
     if provider == "ollama":
         base_url, model = data["ollama_base_url"], data["ollama_model"]
-    else:
+    elif provider == "lmstudio":
         base_url, model = data["lmstudio_base_url"], data["lmstudio_model"]
+    else:
+        base_url, model = OPENROUTER_BASE_URL, data["openrouter_model"]
     return {
         "provider": provider,
         "effective_provider": effective["provider"],
@@ -188,6 +198,9 @@ def settings_for_api() -> dict:
         "lmstudio_base_url": data["lmstudio_base_url"],
         "lmstudio_model": data["lmstudio_model"],
         "lmstudio_embedding_model": data.get("lmstudio_embedding_model", ""),
+        "openrouter_base_url": OPENROUTER_BASE_URL,
+        "openrouter_model": data["openrouter_model"],
+        "openrouter_configured": bool(settings.openrouter_api_key.strip()),
         "box_source": get_box_source(),
         "detector_enabled": get_box_source() == "yolo",  # legacy mirror for old UIs
         "detector_base_url": data.get("detector_base_url", settings.detector_base_url),
