@@ -9,7 +9,7 @@ from pathlib import Path
 from PIL import Image, ImageOps
 from starlette.concurrency import run_in_threadpool
 from app.config import settings
-from app.services.ai_settings_store import get_effective_ai_config, get_box_source
+from app.services.ai_settings_store import get_effective_ai_config, get_box_source, get_provider_config, get_api_key, get_scan_config
 from app.services.detector import detect_boxes
 from app.services import openrouter
 from app.schemas.scan import ScanResult, AIItem, AIContainer
@@ -208,7 +208,7 @@ def _capped_jpeg_bytes(image_path: str) -> bytes:
         img = ImageOps.exif_transpose(img)  # match browser's EXIF rotation
         img = img.convert("RGB")
         longest = max(img.size)
-        cap = settings.scan_max_edge
+        cap = get_scan_config()["scan_max_edge"]
         if cap and longest > cap:
             scale = cap / longest
             img = img.resize((max(1, round(img.width * scale)), max(1, round(img.height * scale))))
@@ -304,9 +304,9 @@ async def _process_openai(image_path: str, system_prompt: str, user_prompt: str)
     from openai import AsyncOpenAI
 
     image_b64 = await run_in_threadpool(_encode_image, image_path)
-    async with AsyncOpenAI(api_key=settings.openai_api_key, timeout=180.0, max_retries=1) as client:
+    async with AsyncOpenAI(api_key=get_api_key("openai"), base_url=get_provider_config("openai")["base_url"], timeout=180.0, max_retries=1) as client:
         response = await client.chat.completions.create(
-            model=settings.openai_model,
+            model=get_provider_config("openai")["model"],
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -324,8 +324,7 @@ async def _process_openai(image_path: str, system_prompt: str, user_prompt: str)
                 },
             ],
             response_format={"type": "json_schema", "json_schema": {"name": "scan_result", "schema": JSON_SCHEMA}},
-            temperature=0.1,
-            max_tokens=2048,
+            max_completion_tokens=get_scan_config()["scan_max_tokens"],
         )
 
     content = response.choices[0].message.content
@@ -337,10 +336,10 @@ async def _process_anthropic(image_path: str, system_prompt: str, user_prompt: s
     import anthropic
 
     image_b64 = await run_in_threadpool(_encode_image, image_path)
-    async with anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=180.0, max_retries=1) as client:
+    async with anthropic.AsyncAnthropic(api_key=get_api_key("anthropic"), base_url="https://api.anthropic.com", timeout=180.0, max_retries=1) as client:
         response = await client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=2048,
+            model=get_provider_config("anthropic")["model"],
+            max_tokens=get_scan_config()["scan_max_tokens"],
             system=system_prompt,
             messages=[
                 {
@@ -384,7 +383,7 @@ async def _process_ollama(image_path: str, system_prompt: str, user_prompt: str)
     import httpx
 
     image_b64 = await run_in_threadpool(_encode_image, image_path)
-    ai = get_effective_ai_config()
+    ai = get_provider_config("ollama")
     base_url = ai["base_url"].rstrip("/")
     model = ai["model"]
 
@@ -401,6 +400,7 @@ async def _process_ollama(image_path: str, system_prompt: str, user_prompt: str)
     async with httpx.AsyncClient(timeout=600.0) as client:
         response = await client.post(
             f"{base_url}/api/chat",
+            headers={"Authorization": f"Bearer {key}"} if (key := get_api_key("ollama", base_url)) else {},
             json={
                 "model": model,
                 "messages": [
@@ -415,8 +415,8 @@ async def _process_ollama(image_path: str, system_prompt: str, user_prompt: str)
                 "format": JSON_SCHEMA,
                 "think": False,
                 "options": {
-                    "num_ctx": settings.ollama_num_ctx,
-                    "num_predict": settings.scan_max_tokens,
+                    "num_ctx": get_scan_config()["ollama_num_ctx"],
+                    "num_predict": get_scan_config()["scan_max_tokens"],
                     "temperature": 0.1,
                 },
             },
@@ -445,7 +445,7 @@ def _strict_scan_schema() -> dict:
 
 async def _process_openrouter(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Analyze an image through OpenRouter with a strict inventory schema."""
-    ai = get_effective_ai_config()
+    ai = get_provider_config("openrouter")
     image_b64 = await run_in_threadpool(_encode_image, image_path)
     content = await openrouter.complete({
         "model": ai["model"],
@@ -457,7 +457,7 @@ async def _process_openrouter(image_path: str, system_prompt: str, user_prompt: 
             ]},
         ],
         "stream": False,
-        "max_tokens": settings.scan_max_tokens,
+        "max_tokens": get_scan_config()["scan_max_tokens"],
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "scan_result", "strict": True, "schema": _strict_scan_schema()},
@@ -506,6 +506,7 @@ async def _process_openai_compatible(
                     },
                 ],
                 "stream": False,
+                "max_tokens": get_scan_config()["scan_max_tokens"],
                 # Constrain output to the schema (LM Studio enforces it as a grammar).
                 # Without this the model only sees prose and invents field names —
                 # dropping "name", so the parser finds nothing.
@@ -522,13 +523,14 @@ async def _process_openai_compatible(
 
 async def _process_lmstudio(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
     """Process image via LM Studio (OpenAI-compatible local server)."""
-    ai = get_effective_ai_config()
+    ai = get_provider_config("lmstudio")
     return await _process_openai_compatible(
         image_path,
         system_prompt,
         user_prompt,
         base_url=ai["base_url"],
         model=ai["model"],
+        api_key=get_api_key("lmstudio", ai["base_url"]),
     )
 
 
@@ -542,9 +544,9 @@ async def _process_omlx(image_path: str, system_prompt: str, user_prompt: str) -
         image_path,
         system_prompt,
         user_prompt,
-        base_url=settings.omlx_base_url,
-        model=settings.omlx_model,
-        api_key=settings.omlx_api_key,
+        base_url=get_provider_config("omlx")["base_url"],
+        model=get_provider_config("omlx")["model"],
+        api_key=get_api_key("omlx"),
     )
 
 

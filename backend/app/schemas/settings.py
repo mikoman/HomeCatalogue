@@ -1,12 +1,31 @@
 """Pydantic schemas for AI settings."""
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, SecretStr
 
 
-LOCAL_PROVIDERS = ("ollama", "lmstudio")
+Provider = Literal["ollama", "lmstudio", "omlx", "openrouter", "openai", "anthropic"]
+
+
+class ProviderSettingsRead(BaseModel):
+    base_url: str
+    model: str
+    embedding_model: str = ""
+    api_key_configured: bool
+    api_key_source: Literal["saved", "environment", "none"]
+    environment_key_available: bool
+
+
+class ScanSettings(BaseModel):
+    scan_max_tokens: int = Field(default=4096, ge=256, le=32768)
+    ollama_num_ctx: int = Field(default=8192, ge=2048, le=131072)
+    scan_max_edge: int = Field(default=1280, ge=256, le=4096)
 
 
 class AISettingsRead(BaseModel):
+    providers: dict[str, ProviderSettingsRead]
+    scan: ScanSettings
     provider: str
     effective_provider: str
     effective_model: str
@@ -30,11 +49,17 @@ class AISettingsRead(BaseModel):
     suggested_urls_by_provider: dict[str, dict[str, str]]
 
 
-class AISettingsUpdate(BaseModel):
-    provider: str = Field(..., pattern="^(ollama|lmstudio|openrouter)$")
-    base_url: str
+class AIProviderRequest(BaseModel):
+    provider: Provider
+    base_url: str | None = None
+    api_key: SecretStr | None = Field(default=None, max_length=4096)
+    api_key_action: Literal["keep", "replace", "clear", "environment"] = "keep"
+
+
+class AISettingsUpdate(AIProviderRequest):
     model: str = Field(..., min_length=1, max_length=255)
-    embedding_model: str | None = None
+    embedding_model: str | None = Field(default=None, max_length=255)
+    activate: bool = True
 
 
 class DetectorSettingsUpdate(BaseModel):

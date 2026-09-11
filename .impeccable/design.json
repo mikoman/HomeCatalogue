@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T14:49:08.642053+00:00",
+  "title": "Design System: Home Catalogue",
+  "extensions": {
+    "colorMeta": {
+      "primary-300": {
+        "role": "primary",
+        "displayName": "Safety yellow-300",
+        "tonalRamp": [
+          "#3D2D00",
+          "#6B4F00",
+          "#A37800",
+          "#E0A800",
+          "#FFC700",
+          "#FFD11F",
+          "#FFEA85",
+          "#FFFCEB"
+        ]
+      },
+      "primary-400": {
+        "role": "primary",
+        "displayName": "Safety yellow-400",
+        "tonalRamp": [
+          "#3D2D00",
+          "#6B4F00",
+          "#A37800",
+          "#E0A800",
+          "#FFC700",
+          "#FFD11F",
+          "#FFEA85",
+          "#FFFCEB"
+        ]
+      },
+      "primary-500": {
+        "role": "primary",
+        "displayName": "Safety yellow-500",
+        "tonalRamp": [
+          "#3D2D00",
+          "#6B4F00",
+          "#A37800",
+          "#E0A800",
+          "#FFC700",
+          "#FFD11F",
+          "#FFEA85",
+          "#FFFCEB"
+        ]
+      },
+      "surface-100": {
+        "role": "neutral",
+        "displayName": "Charcoal-100",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-200": {
+        "role": "neutral",
+        "displayName": "Charcoal-200",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-300": {
+        "role": "neutral",
+        "displayName": "Charcoal-300",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-400": {
+        "role": "neutral",
+        "displayName": "Charcoal-400",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-500": {
+        "role": "neutral",
+        "displayName": "Charcoal-500",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-600": {
+        "role": "neutral",
+        "displayName": "Charcoal-600",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-700": {
+        "role": "neutral",
+        "displayName": "Charcoal-700",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-800": {
+        "role": "neutral",
+        "displayName": "Charcoal-800",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-900": {
+        "role": "neutral",
+        "displayName": "Charcoal-900",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "surface-950": {
+        "role": "neutral",
+        "displayName": "Charcoal-950",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      },
+      "danger": {
+        "displayName": "Danger",
+        "tonalRamp": [
+          "#450a0a",
+          "#7f1d1d",
+          "#991b1b",
+          "#b91c1c",
+          "#dc2626",
+          "#ef4444",
+          "#fca5a5",
+          "#fef2f2"
+        ]
+      },
+      "danger-hover": {
+        "displayName": "Danger hover",
+        "tonalRamp": [
+          "#450a0a",
+          "#7f1d1d",
+          "#991b1b",
+          "#b91c1c",
+          "#dc2626",
+          "#ef4444",
+          "#fca5a5",
+          "#fef2f2"
+        ]
+      },
+      "error-text": {
+        "displayName": "Error text",
+        "tonalRamp": [
+          "#450a0a",
+          "#7f1d1d",
+          "#991b1b",
+          "#b91c1c",
+          "#dc2626",
+          "#ef4444",
+          "#fca5a5",
+          "#fef2f2"
+        ]
+      },
+      "error-border": {
+        "displayName": "Error border",
+        "tonalRamp": [
+          "#450a0a",
+          "#7f1d1d",
+          "#991b1b",
+          "#b91c1c",
+          "#dc2626",
+          "#ef4444",
+          "#fca5a5",
+          "#fef2f2"
+        ]
+      },
+      "error-background": {
+        "displayName": "Error background",
+        "tonalRamp": [
+          "#450a0a",
+          "#7f1d1d",
+          "#991b1b",
+          "#b91c1c",
+          "#dc2626",
+          "#ef4444",
+          "#fca5a5",
+          "#fef2f2"
+        ]
+      },
+      "success-text": {
+        "displayName": "Success text",
+        "tonalRamp": [
+          "#052e16",
+          "#14532d",
+          "#166534",
+          "#15803d",
+          "#16a34a",
+          "#22c55e",
+          "#86efac",
+          "#f0fdf4"
+        ]
+      },
+      "success-border": {
+        "displayName": "Success border",
+        "tonalRamp": [
+          "#052e16",
+          "#14532d",
+          "#166534",
+          "#15803d",
+          "#16a34a",
+          "#22c55e",
+          "#86efac",
+          "#f0fdf4"
+        ]
+      },
+      "success-background": {
+        "displayName": "Success background",
+        "tonalRamp": [
+          "#052e16",
+          "#14532d",
+          "#166534",
+          "#15803d",
+          "#16a34a",
+          "#22c55e",
+          "#86efac",
+          "#f0fdf4"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "tonalRamp": [
+          "#0A0A0B",
+          "#141416",
+          "#1E1E22",
+          "#2C2C31",
+          "#46464D",
+          "#9A9AA3",
+          "#E4E4E7",
+          "#FAFAFA"
+        ]
+      }
+    },
+    "shadows": [
+      {
+        "name": "sm",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "The shared primary button shadow at rest."
+      },
+      {
+        "name": "glow",
+        "value": "0 0 0 1px rgba(255,199,0,0.4), 0 8px 30px -8px rgba(255,199,0,0.25)",
+        "purpose": "The shared primary button shadow on hover."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control-transition",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Shared button and field state transitions."
+      },
+      {
+        "name": "button-press",
+        "value": "scale(0.98)",
+        "purpose": "Shared button press feedback."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A Settings action using the shared button style.",
+      "html": "<button class=\"ds-button-primary\">Save and use provider</button>",
+      "css": ".ds-button-primary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:0;border-radius:6px;background:#FFC700;color:#0A0A0B;font: 600 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:all 150ms cubic-bezier(0.4,0,0.2,1);box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);}.ds-button-primary:hover{background:#FFD11F;}.ds-button-primary:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}.ds-button-primary:active{transform:scale(0.98)}.ds-button-primary:disabled{opacity:0.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition-duration:0.001ms!important}}.ds-button-primary:hover{box-shadow:0 0 0 1px rgba(255,199,0,0.4),0 8px 30px -8px rgba(255,199,0,0.25)}.ds-button-primary:disabled{opacity:0.5}.ds-button-primary:disabled:hover{background:#FFC700}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A Settings action using the shared button style.",
+      "html": "<button class=\"ds-button-secondary\">Test connection</button>",
+      "css": ".ds-button-secondary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid #2C2C31;border-radius:6px;background:#141416;color:#E4E4E7;font: 500 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:all 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-secondary:hover{background:#1E1E22;}.ds-button-secondary:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}.ds-button-secondary:active{transform:scale(0.98)}.ds-button-secondary:disabled{opacity:0.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition-duration:0.001ms!important}}.ds-button-secondary:hover{border-color:#46464D}"
+    },
+    {
+      "name": "Destructive button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "A Settings action using the shared button style.",
+      "html": "<button class=\"ds-button-danger\">Delete everything</button>",
+      "css": ".ds-button-danger{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border:0;border-radius:6px;background:#dc2626;color:#fff;font: 500 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:all 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-danger:hover{background:#ef4444;}.ds-button-danger:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}.ds-button-danger:active{transform:scale(0.98)}.ds-button-danger:disabled{opacity:0.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-danger{transition-duration:0.001ms!important}}"
+    },
+    {
+      "name": "Text field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A labelled field with help text and a yellow focus ring.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-model\">Vision model</label><input class=\"ds-field\" id=\"ds-model\" placeholder=\"Enter a model ID\"><p class=\"ds-field-help\">Enter a model ID, or select an available model.</p>",
+      "css": ".ds-field-label{display:block;margin-bottom:8px;color:#C7C7CD;font:500 14px/20px Inter, system-ui, -apple-system, sans-serif}.ds-field{min-height:44px;width:100%;padding:10px 14px;background:#0A0A0B;border:1px solid #2C2C31;border-radius:6px;color:#F4F4F5;caret-color:#FFC700;font:400 14px/20px Inter, system-ui, -apple-system, sans-serif;transition:all 150ms cubic-bezier(0.4,0,0.2,1)}.ds-field::placeholder{color:#92929B}.ds-field:focus{outline:none;border-color:#FFC700;box-shadow:0 0 0 1px #FFC700}.ds-field-help{margin:8px 0 0;color:#9A9AA3;font:400 12px/16px Inter, system-ui, -apple-system, sans-serif}@media(max-width:640px){.ds-field{font-size:16px}}@media(prefers-reduced-motion:reduce){.ds-field{transition-duration:0.001ms!important}}"
+    },
+    {
+      "name": "Settings sections",
+      "kind": "nav",
+      "refersTo": "section-selected",
+      "description": "Wrapping section buttons show the selected section.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Settings sections\"><button class=\"ds-nav-button\" aria-pressed=\"true\">Providers and models</button><button class=\"ds-nav-button\" aria-pressed=\"false\">Scans and boxes</button><button class=\"ds-nav-button\" aria-pressed=\"false\">Catalogue data</button></nav>",
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:12px;border-bottom:1px solid #1E1E22}.ds-nav-button{min-height:44px;padding:8px 12px;border:0;border-radius:6px;background:transparent;color:#C7C7CD;font:500 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:color 150ms,background-color 150ms}.ds-nav-button:hover{background:#1E1E22}.ds-nav-button[aria-pressed=\"true\"]{background:#FFC700;color:#0A0A0B}.ds-nav-button:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}@media(prefers-reduced-motion:reduce){.ds-nav-button{transition-duration:0.001ms!important}}"
+    },
+    {
+      "name": "Settings card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A shared card with the larger padding used by Settings forms.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">Scan limits</h2><p class=\"ds-card-copy\">Control image detail, output length, and local memory use.</p></section>",
+      "css": ".ds-card{min-width:0;max-width:100%;padding:20px;background:#141416;border:1px solid #1E1E22;border-radius:8px}.ds-card-title{margin:0;color:#F4F4F5;font:600 20px/28px \"Space Grotesk\",Inter,system-ui,sans-serif}.ds-card-copy{margin:8px 0 0;color:#9A9AA3;font:400 14px/20px Inter, system-ui, -apple-system, sans-serif}@media(min-width:640px){.ds-card{padding:24px}}"
+    },
+    {
+      "name": "Status panel",
+      "kind": "custom",
+      "description": "A written success or error message follows the related action.",
+      "html": "<div class=\"ds-feedback ds-feedback-success\" role=\"status\">Scan limits saved. New scans use these values.</div>",
+      "css": ".ds-feedback{padding:12px 16px;border:1px solid;border-radius:6px;font:400 14px/20px Inter, system-ui, -apple-system, sans-serif}.ds-feedback-success{color:#86efac;border-color:#14532d;background:rgb(5 46 22 / 0.2)}.ds-feedback-error{color:#fca5a5;border-color:#7f1d1d;background:rgb(69 10 10 / 0.2)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Charcoal and safety yellow",
+    "overview": "The interface uses charcoal surfaces and a safety-yellow accent. A faint square grid sits behind solid panels. Space Grotesk headings and Inter controls give each page a clear reading order.",
+    "keyCharacteristics": [
+      "Charcoal panels with quiet borders.",
+      "Yellow actions and selected states.",
+      "Rounded controls with visible keyboard focus."
+    ],
+    "rules": [
+      {
+        "name": "The Action Color Rule",
+        "body": "Yellow marks primary actions. Red marks destructive actions.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do use the existing font families and color roles.",
+      "Do pair status colors with readable text.",
+      "Do let control groups wrap and long model names break.",
+      "Do retain visible keyboard focus and reduced-motion support."
+    ],
+    "donts": [
+      "Don't use the primary action style for catalogue deletion.",
+      "Don't use selection color as the only indication of an active provider."
+    ]
+  }
+}

@@ -2,26 +2,28 @@
 
 import httpx
 
-from app.config import settings
+from app.services.ai_providers import CLOUD_URLS
 
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_BASE_URL = CLOUD_URLS["openrouter"]
 
 
 class OpenRouterError(RuntimeError):
     """An OpenRouter failure that can be shown to the user."""
 
 
-def _headers() -> dict[str, str]:
-    key = settings.openrouter_api_key.strip()
+def _headers(api_key: str | None = None) -> dict[str, str]:
+    from app.services.ai_settings_store import get_api_key
+
+    key = get_api_key("openrouter") if api_key is None else api_key
     if not key:
-        raise OpenRouterError("Set OPENROUTER_API_KEY on the backend, then restart the backend.")
+        raise OpenRouterError("Enter an OpenRouter API key in Settings, or set OPENROUTER_API_KEY on the backend.")
     return {"Authorization": f"Bearer {key}", "X-OpenRouter-Title": "Home Catalogue"}
 
 
 def _status_error(status: int) -> OpenRouterError:
     messages = {
-        401: "OpenRouter rejected the API key. Check OPENROUTER_API_KEY on the backend.",
+        401: "OpenRouter rejected the API key. Replace the key in Settings.",
         402: "OpenRouter needs credits. Check the account balance and spending limit.",
         403: "OpenRouter denied this request. Check the account permissions and provider policies.",
         404: "OpenRouter could not find a compatible endpoint. Choose an image model with structured outputs.",
@@ -73,10 +75,10 @@ async def fetch_models() -> list[dict]:
     return sorted(models, key=lambda model: model["name"].casefold())
 
 
-async def check_credentials() -> None:
+async def check_credentials(api_key: str | None = None) -> None:
     """Check the key without sending an image or generating paid output."""
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(f"{OPENROUTER_BASE_URL}/key", headers=_headers())
+        response = await client.get(f"{OPENROUTER_BASE_URL}/key", headers=_headers(api_key))
     data = _payload(response).get("data")
     if not isinstance(data, dict):
         raise OpenRouterError("OpenRouter returned an invalid credential response.")

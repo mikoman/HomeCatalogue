@@ -1,96 +1,92 @@
-"""Fetch models from local providers and OpenRouter."""
+"""Discover provider models and test credentials without image inference."""
 
 import time
 import httpx
 from app.services import openrouter
+from app.services.ai_providers import CLOUD_URLS, provider_url
+from app.services.ai_settings_store import get_api_key
 
 
-async def fetch_ollama_models(base_url: str) -> list[dict]:
-    url = f"{base_url.rstrip('/')}/api/tags"
+async def fetch_models(provider: str, base_url: str, api_key: str) -> list[dict]:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    if provider == "anthropic":
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+    endpoint = "/api/tags" if provider == "ollama" else "/models"
+    params = {"limit": 1000} if provider == "anthropic" else {}
+    models = {}
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(url)
-    response.raise_for_status()
-    payload = response.json()
-    return [
-        {"id": m["name"], "name": m["name"]}
-        for m in payload.get("models", [])
-        if m.get("name")
-    ]
+        for _ in range(10):
+            response = await client.get(f"{base_url}{endpoint}", headers=headers, params=params)
+            response.raise_for_status()
+            payload = response.json()
+            entries = payload.get("models" if provider == "ollama" else "data")
+            if not isinstance(entries, list):
+                raise ValueError("Invalid model list")
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                model_id = entry.get("name") if provider == "ollama" else entry.get("id")
+                if isinstance(model_id, str) and model_id:
+                    name = entry.get("display_name") or model_id
+                    models[model_id] = {"id": model_id, "name": name if isinstance(name, str) else model_id}
+            if provider != "anthropic" or not payload.get("has_more"):
+                break
+            cursor = payload.get("last_id")
+            if not isinstance(cursor, str) or cursor == params.get("after_id"):
+                raise ValueError("Invalid model cursor")
+            params["after_id"] = cursor
+        else:
+            raise ValueError("Model list exceeded the page limit")
+    return list(models.values())
 
 
-async def fetch_lmstudio_models(base_url: str) -> list[dict]:
-    url = f"{base_url.rstrip('/')}/models"
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get(url)
-    response.raise_for_status()
-    payload = response.json()
-    models = []
-    for entry in payload.get("data", []):
-        model_id = entry.get("id") or entry.get("name")
-        if model_id:
-            models.append({"id": model_id, "name": model_id})
-    return models
-
-
-async def list_models(provider: str, base_url: str) -> tuple[list[dict], str | None]:
+async def list_models(provider: str, base_url: str, api_key: str | None = None) -> tuple[list[dict], str | None]:
     try:
-        if provider == "ollama":
-            return await fetch_ollama_models(base_url), None
-        if provider == "lmstudio":
-            return await fetch_lmstudio_models(base_url), None
+        base_url = provider_url(provider, base_url)
         if provider == "openrouter":
             return await openrouter.fetch_models(), None
-        return [], f"Unsupported provider: {provider}"
-    except httpx.HTTPError as exc:
-        if provider == "openrouter":
-            return [], "Cannot connect to OpenRouter. Check the backend internet connection."
-        return [], f"Could not reach server: {exc}"
-    except Exception as exc:
-        return [], str(exc)
+        key = get_api_key(provider, base_url) if api_key is None else api_key
+        if provider in CLOUD_URLS and not key:
+            return [], "Enter an API key before loading models."
+        return await fetch_models(provider, base_url, key), None
+    except openrouter.OpenRouterError as error:
+        return [], str(error)
+    except httpx.HTTPStatusError as error:
+        if error.response.status_code in (401, 403):
+            return [], "The server rejected the credentials. Check the API key and its permissions."
+        return [], f"The server returned HTTP {error.response.status_code}. Check the server URL and service status."
+    except httpx.HTTPError:
+        return [], "Cannot connect to the server. Check the URL and the backend network connection."
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return [], "The server returned an invalid model list. Check the provider and server URL."
 
 
-async def test_connection(provider: str, base_url: str) -> dict:
-    """Ping the provider server and report whether models are reachable."""
+async def test_connection(provider: str, base_url: str, api_key: str | None = None) -> dict:
     start = time.monotonic()
+    error = None
+    models = []
     if provider == "openrouter":
         try:
-            await openrouter.check_credentials()
-        except (openrouter.OpenRouterError, httpx.HTTPError) as exc:
-            return {
-                "ok": False,
-                "message": str(exc) if isinstance(exc, openrouter.OpenRouterError) else "Cannot connect to OpenRouter.",
-                "latency_ms": int((time.monotonic() - start) * 1000),
-                "model_count": 0,
-            }
-    models, error = await list_models(provider, base_url)
-    latency_ms = int((time.monotonic() - start) * 1000)
-    if error:
-        return {
-            "ok": False,
-            "message": error,
-            "latency_ms": latency_ms,
-            "model_count": 0,
-        }
-    if not models:
-        return {
-            "ok": False,
-            "message": "Server responded but returned no models.",
-            "latency_ms": latency_ms,
-            "model_count": 0,
-        }
+            await openrouter.check_credentials(api_key)
+        except openrouter.OpenRouterError as failure:
+            error = str(failure)
+        except httpx.HTTPError:
+            error = "Cannot connect to OpenRouter. Check the backend internet connection."
+    if error is None:
+        models, error = await list_models(provider, base_url, api_key)
     return {
-        "ok": True,
-        "message": (
-            f"Key accepted. {len(models)} image models support structured outputs. Model inference was not tested."
-            if provider == "openrouter" else f"Connected — {len(models)} model(s) available"
+        "ok": error is None,
+        "message": error or (
+            f"Connection accepted. {len(models)} models available. Model inference was not tested."
+            if models else "The server responded but returned no models. Install or load a vision model, then refresh the list."
         ),
-        "latency_ms": latency_ms,
+        "latency_ms": int((time.monotonic() - start) * 1000),
         "model_count": len(models),
     }
 
 
 async def test_detector(base_url: str) -> dict:
-    """Ping the YOLO-World detector sidecar's /health endpoint."""
+    """Test the detector health endpoint."""
     start = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -114,14 +110,14 @@ async def test_detector(base_url: str) -> dict:
     except httpx.HTTPError as exc:
         return {
             "ok": False,
-            "message": f"Could not reach detector: {exc}",
+            "message": "Cannot connect to the detector. Check its URL and start the detector server.",
             "latency_ms": int((time.monotonic() - start) * 1000),
             "model_count": 0,
         }
     except Exception as exc:
         return {
             "ok": False,
-            "message": str(exc),
+            "message": "The detector returned an invalid response. Check its server URL.",
             "latency_ms": int((time.monotonic() - start) * 1000),
             "model_count": 0,
         }

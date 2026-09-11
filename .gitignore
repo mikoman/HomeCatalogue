@@ -17,6 +17,7 @@ dist/
 *.local
 
 # Uploads & runtime data
+ai_settings.json
 storage/uploads/*
 !storage/uploads/.gitkeep
 
@@ -30,3 +31,6 @@ storage/uploads/*
 detector/mobileclip*.ts
 .gitnexus
 .claude
+
+# Generated interface review captures
+.impeccable/review/

@@ -3,7 +3,7 @@
 Home Catalogue is a self-hosted application for household inventory. It uses a vision model to identify objects in photographs.
 You review the suggestions before the application saves items and containers.
 
-Use Ollama or LM Studio for local inference. Local scans need no API key.
+Use Ollama, LM Studio, or oMLX for local inference. Local servers can use an optional API key.
 OpenRouter provides an optional cloud service. Cloud scans send photographs outside your machine and can incur charges.
 
 The catalogue uses this structure:
@@ -43,8 +43,8 @@ See the [model research](docs/model-research.md) for model comparisons and sourc
 | Feature | Description |
 |---|---|
 | Photo scans | A vision model identifies visible items and proposes containers. |
-| Local and cloud inference | Select Ollama, LM Studio, or OpenRouter in Settings. |
-| Provider settings | Select the provider, server URL, and model. Test the connection and request the current model list. |
+| Local and cloud inference | Select Ollama, LM Studio, oMLX, OpenRouter, OpenAI, or Anthropic in Settings. |
+| Provider settings | Configure providers, API keys, local server URLs, and models. Test connections and search model lists. |
 | Background analysis | Upload multiple photographs. The server retains scan progress after a page refresh. |
 | Container scans | Catalogue the visible contents of a drawer, bin, suitcase, or other container. |
 | Nested containers | Organize items within containers and nested containers. |
@@ -138,22 +138,85 @@ docker compose up -d
 | Backend API | [localhost:8000](http://localhost:8000) |
 | Interactive API documentation | [localhost:8000/docs](http://localhost:8000/docs) |
 
-### Select the provider
+### Configure the backend in Settings
 
-1. Open **Settings** at `/settings`.
-2. Select **Ollama**, **LM Studio**, or **OpenRouter**.
-3. For a local provider, enter the server URL.
-4. Select **Test**.
-5. Select **Load models**.
-6. Select a vision model.
-7. Select **Save settings**.
+Open **Settings** at `/settings`. The page has three sections:
+
+| Section | Controls |
+|---|---|
+| **Providers and models** | Six providers, server URLs, API keys, connection tests, model search, and embedding models |
+| **Scans and boxes** | Box source, detector URL, detector test, image size, output limit, and Ollama context |
+| **Catalogue data** | Search reindex, storage information, and catalogue reset |
+
+To configure a provider:
+
+1. Open **Providers and models**.
+2. Select a provider.
+3. For a local provider, enter its server URL.
+4. Enter an API key if the provider requires one.
+5. Select **Test connection**.
+6. Select **Load models** if you need to refresh the list.
+7. Search for a vision model, or enter its exact ID.
+8. Select **Save and use provider**.
+
+The header shows the provider and model for new scans.
+Selecting a provider for editing does not activate it.
+**Save provider only** stores its configuration without changing the active provider.
+Saving changes to the active provider updates new scans, with either save button.
+
+Each provider retains its own URL, model, and credential.
+Draft edits remain available when you change providers or sections on this page.
+Save each edited section before leaving Settings.
+**Discard edits** restores the selected provider's saved configuration.
 
 Use `host.docker.internal` to reach a host service from the Docker backend.
 Use `localhost` when the backend and model server run directly on the same machine.
-The Settings page provides buttons for these addresses. OpenRouter uses a constant HTTPS endpoint.
+Settings provides buttons for these addresses.
+OpenRouter, OpenAI, and Anthropic use constant official HTTPS endpoints.
 
-Saved provider settings apply to new scans without a restart.
-Environment changes, including API key changes, require a backend restart.
+Local model lists can include text and embedding models. Select a model that accepts images.
+OpenRouter lists image models that advertise structured output.
+Connection tests send no photos and generate no inference output.
+A successful connection does not prove that the selected model can process a scan.
+
+Saved settings and keys apply without a restart.
+Environment changes require a backend restart.
+Install local models in Ollama, LM Studio, or oMLX before scanning.
+Settings connects to these servers. It does not install models or start their processes.
+
+### Store and replace API keys
+
+Paste a key into **API key**, then save the provider.
+**Show** shows only the key you entered. It cannot retrieve a saved key.
+A blank field preserves the current key.
+
+Use **Key action when saving** for these changes:
+
+| Action | Result after saving |
+|---|---|
+| **Keep or replace key** | Keep the existing key when the field is blank. Replace it when the field contains a key. |
+| **Remove key** | Remove the saved key and disable the environment key for that provider. |
+| **Use environment key** | Remove the saved override and use the backend environment key. This option requires an environment key. |
+
+Use **Save provider only** to remove a cloud key without activating an incomplete configuration.
+Removing a key from the active cloud provider prevents new scans until a key is available.
+For local providers, a URL change does not transfer the previous key to the new server.
+Enter a key for the new server if it requires one.
+
+The backend stores keys with runtime settings in `ai_settings.json`.
+The file uses owner-only permissions (`0600`) and atomic replacement.
+The file contains unencrypted keys. Protect this file and its backups.
+Git ignores `ai_settings.json`. The local runtime file remains available.
+Add a custom settings filename to your ignore rules if you change `AI_SETTINGS_FILE`.
+The API returns key status, not key values. The UI does not store keys in browser storage.
+Connection tests send draft keys in request bodies, not URLs, and do not save them.
+Environment keys remain in the environment unless you enter a replacement through Settings.
+
+Provider references: [OpenRouter authentication](https://openrouter.ai/docs/api/reference/authentication), [LM Studio authentication](https://lmstudio.ai/docs/developer/core/authentication), and [Claude model discovery](https://platform.claude.com/docs/en/api/models/list).
+
+Home Catalogue has no sign-in. Use a trusted network or an authenticated reverse proxy.
+Anyone with access to the app can change settings and use configured providers.
+Use HTTPS when you access Settings across a network.
 
 ### Start a local development environment
 
@@ -194,37 +257,36 @@ Home Catalogue uses this text to propose item names, categories, tags, and conta
 |---|---|---|
 | Ollama | `http://localhost:11434` | `http://host.docker.internal:11434` |
 | LM Studio | `http://localhost:1234/v1` | `http://host.docker.internal:1234/v1` |
+| oMLX | `http://localhost:8000/v1` | `http://host.docker.internal:8000/v1` |
+
+If oMLX and the backend share a machine, assign different ports to their servers.
 
 Select these providers through Settings. Each provider retains its own model choice.
 Settings also identifies the provider and model that new scans will use.
 
-The application stores runtime choices in `storage/ai_settings.json`.
+The Docker deployment stores runtime choices and saved keys in `storage/ai_settings.json`.
 Use `AI_SETTINGS_FILE` to change that path.
 An existing `llava` selection remains active until you select a replacement.
 
 ### OpenRouter
 
 OpenRouter is available in Settings beside the local providers.
-Its API key stays in the backend environment.
-The application does not store the key in browser storage, API responses, or `ai_settings.json`.
 
 To configure OpenRouter:
 
 1. Create an [OpenRouter API key](https://openrouter.ai/keys).
-2. Set `OPENROUTER_API_KEY` in the backend environment or deployment secrets.
-3. Restart the backend.
-4. Open **Settings**.
-5. Select **OpenRouter**.
-6. Select **Test** to check the key.
-7. Select **Load models**.
-8. Select a vision model.
-9. Select **Save settings**.
+2. Open **Settings**.
+3. Select **OpenRouter** under **Providers and models**.
+4. Paste the key into **API key**.
+5. Select **Test connection**.
+6. Select a vision model.
+7. Select **Save and use provider**.
 
-For Compose, run this command after changing the backend environment:
-
-```bash
-docker compose up -d --force-recreate backend
-```
+You can also supply `OPENROUTER_API_KEY` through the backend environment.
+Restart the backend after an environment change.
+For Compose, use `docker compose up -d --force-recreate backend`.
+A saved key overrides the environment key.
+See [API key storage](#store-and-replace-api-keys) for replacement and removal.
 
 The connection test sends no photograph and generates no paid output.
 It checks the key and model catalogue. A successful scan is still necessary to test the selected inference endpoint.
@@ -260,7 +322,9 @@ Authentication, credit, request-limit, and provider errors do not trigger this r
 
 ### Direct OpenAI and Anthropic connections
 
-Direct OpenAI and Anthropic connections use environment configuration.
+Select **OpenAI** or **Anthropic** in Settings to configure a direct connection.
+Enter the API key, load the model list, and select an image-capable model.
+You can also use environment configuration.
 `AI_PROVIDER` selects the initial provider when no saved choice exists.
 A provider choice saved through Settings overrides this default for new scans.
 
@@ -354,7 +418,9 @@ ollama pull qwen3.8:27b
 ollama ps
 ```
 
-The backend uses `OLLAMA_NUM_CTX=8192` and `SCAN_MAX_TOKENS=4096` for its Ollama context and output limits.
+The initial Ollama context is `8192` tokens. The initial output limit is `4096` tokens.
+Change these values in **Settings → Scans and boxes → Scan limits**.
+`OLLAMA_NUM_CTX` and `SCAN_MAX_TOKENS` supply the environment defaults.
 It also sends `think: false`.
 These settings limit memory allocation and reserve output for the inventory.
 Adjust them for crowded scenes when necessary.
@@ -401,7 +467,7 @@ Then configure the application:
 1. Open **Settings**.
 2. Select **Detector** under **Detection mode**.
 3. Enter the detector URL from the table below.
-4. Select **Test**.
+4. Select **Test detector**.
 5. Select **Save detection settings**.
 
 | Backend location | Detector URL |
@@ -456,10 +522,11 @@ The application currently matches same-class detections to items by detector sco
 This match does not establish which bottle or book corresponds to a detailed name.
 Check repeated objects during review.
 
-The backend limits the longest image edge to `SCAN_MAX_EDGE=1280` and preserves the aspect ratio.
+The initial maximum image edge is `1280` pixels. The backend preserves the aspect ratio.
+Change **Maximum image edge** in Settings. `SCAN_MAX_EDGE` supplies its environment default.
 This reduction can obscure small label details.
 Use closer photographs first.
-Test `SCAN_MAX_EDGE=1920` only when sufficient memory is available.
+Test a maximum image edge of `1920` pixels only when sufficient memory is available.
 
 The browser also resizes uploads.
 A higher backend limit cannot recover pixels that the browser discarded.
@@ -645,12 +712,13 @@ homeCatalogue/
 │       │   ├── ReviewScan.jsx      # Scan review
 │       │   ├── ItemCard.jsx · ContainerTree.jsx · MovePicker.jsx
 │       │   ├── SearchBar.jsx · SearchResults.jsx
-│       │   └── Settings.jsx        # AI settings interface
+│       │   ├── Settings.jsx        # Backend settings interface
+│       │   └── settings/           # Provider, scan, and catalogue controls
 │       ├── hooks/ · utils/ · api/client.js
 │       └── App.jsx
 ├── storage/
 │   ├── uploads/                    # Scan images
-│   ├── ai_settings.json            # Created when settings are saved
+│   ├── ai_settings.json            # Runtime settings and optional API keys
 │   └── home_catalogue.db           # SQLite database
 ├── docker-compose.yml
 ├── Dockerfile.backend · Dockerfile.frontend
@@ -730,9 +798,13 @@ The following tables describe the main catalogue endpoints.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/settings/ai` | Read the current AI configuration. |
-| `PUT` | `/api/settings/ai` | Save the provider, base URL, and model. |
-| `GET` | `/api/settings/ai/models?provider={ollama\|lmstudio\|openrouter}&base_url={url}` | List models from the provider. |
-| `GET` | `/api/settings/ai/test?provider={ollama\|lmstudio\|openrouter}&base_url={url}` | Test the provider connection. |
+| `PUT` | `/api/settings/ai` | Save provider fields and optional credentials. Set `activate=false` to preserve the active provider. |
+| `POST` | `/api/settings/ai/models` | List models with saved or draft credentials. Send `provider`, optional `base_url`, and optional `api_key`. |
+| `POST` | `/api/settings/ai/test` | Test a provider with saved or draft credentials. No inference request occurs. |
+| `GET` | `/api/settings/ai/models`, `/api/settings/ai/test` | Compatibility endpoints for saved credentials. Use `provider` and optional `base_url` query parameters. |
+| `PUT` | `/api/settings/scan` | Save `scan_max_edge`, `scan_max_tokens`, and `ollama_num_ctx`. |
+| `PUT` | `/api/settings/detector` | Save the box source and detector URL. |
+| `GET` | `/api/settings/detector/test` | Test the detector health endpoint. |
 
 ## Storage and backup
 
@@ -787,7 +859,12 @@ Detector adapter tests use model substitutes, so backend tests do not download w
 The September 2026 implementation check ran YOLOE-26s on CPU with a synthetic blank image and an Ultralytics example photograph.
 That check covered runtime compatibility and box serialization.
 It did not establish household accuracy, CUDA or MPS support, or peak memory use on a 32 GB machine.
-Local VLM generation and paid OpenRouter inference still require a configured service and representative photographs.
+The setup tests cover all six providers with simulated HTTP responses and temporary settings files.
+They check credential replacement, endpoint binding, scan limits, pagination, and safe error responses.
+Frontend tests check draft handling, model search, and credential requests.
+Browser checks use a separate test database and synthetic provider responses.
+
+Local VLM generation and paid cloud inference still require a configured service and representative photographs.
 
 ### Add an AI provider
 
@@ -807,9 +884,9 @@ Set detector variables in the separate detector process environment.
 | `AI_PROVIDER` | `ollama` | Select `ollama`, `lmstudio`, `openrouter`, `openai`, `anthropic`, or `omlx`. |
 | `OPENROUTER_API_KEY` | Empty | OpenRouter key on the backend. Restart the backend after changing it. |
 | `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | Initial OpenRouter model. Settings overrides it. |
-| `SCAN_MAX_TOKENS` | `4096` | Output limit for Ollama and OpenRouter. |
-| `OLLAMA_NUM_CTX` | `8192` | Context size for Ollama. |
-| `SCAN_MAX_EDGE` | `1280` | Maximum image edge sent to inference providers. |
+| `SCAN_MAX_TOKENS` | `4096` | Initial output limit for all scan providers. Settings overrides it. |
+| `OLLAMA_NUM_CTX` | `8192` | Initial context size for Ollama. Settings overrides it. |
+| `SCAN_MAX_EDGE` | `1280` | Initial maximum image edge. Settings overrides it. |
 | `DETECTOR_BASE_URL` | `http://host.docker.internal:8077` | Initial detector URL. Settings overrides it. |
 | `DETECTOR_MODEL` | `yoloe-26s-seg.pt` | Detector checkpoint. |
 | `DETECTOR_CONF` | `0.25` | Detector confidence threshold. |
@@ -823,6 +900,9 @@ Set detector variables in the separate detector process environment.
 | `OLLAMA_MODEL` | `qwen3.5:9b` | Initial Ollama model. |
 | `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio OpenAI-compatible API endpoint. |
 | `LMSTUDIO_MODEL` | Empty | Initial LM Studio model ID. |
+| `OMLX_BASE_URL` | `http://host.docker.internal:8000/v1` | Initial oMLX endpoint. Use a different port if the backend shares this machine. |
+| `OMLX_MODEL` | `mlx-community/llava-1.5-7b-4bit` | Initial oMLX model ID. Settings overrides it. |
+| `OMLX_API_KEY` | Empty | Optional oMLX environment key. A saved key overrides it. |
 | `AI_SETTINGS_FILE` | `{upload_dir}/../ai_settings.json` | Runtime settings file path. |
 | `RUNNING_IN_DOCKER` | Unset | Set `1` in Docker to enable host URL hints in Settings. |
 | `DATABASE_URL` | `sqlite:///./home_catalogue.db` | Database connection. |

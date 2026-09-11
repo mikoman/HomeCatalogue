@@ -68,7 +68,7 @@ def test_invalid_inventory_uses_the_existing_repair_attempt(monkeypatch):
 
 def test_ollama_uses_bounded_context_and_rejects_truncated_json(monkeypatch):
     monkeypatch.setattr(ai_vision, "_encode_image", lambda _: "photo")
-    monkeypatch.setattr(ai_vision, "get_effective_ai_config", lambda: {"base_url": "http://ollama", "model": "qwen3.5:9b"})
+    monkeypatch.setattr(ai_vision, "get_provider_config", lambda provider: {"base_url": "http://ollama", "model": "qwen3.5:9b"})
 
     def handler(request):
         body = json.loads(request.content)

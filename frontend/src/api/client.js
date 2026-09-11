@@ -127,16 +127,9 @@ export const scan = {
 export const aiSettings = {
   get: () => request('/settings/ai'),
   update: (data) => request('/settings/ai', { method: 'PUT', body: JSON.stringify(data) }),
-  listModels: (provider, baseUrl) => {
-    const params = new URLSearchParams({ provider });
-    if (baseUrl) params.set('base_url', baseUrl);
-    return request(`/settings/ai/models?${params.toString()}`);
-  },
-  testConnection: (provider, baseUrl) => {
-    const params = new URLSearchParams({ provider });
-    if (baseUrl) params.set('base_url', baseUrl);
-    return request(`/settings/ai/test?${params.toString()}`);
-  },
+  listModels: (data, signal) => request('/settings/ai/models', { method: 'POST', body: JSON.stringify(data), signal }),
+  testConnection: (data, signal) => request('/settings/ai/test', { method: 'POST', body: JSON.stringify(data), signal }),
+  updateScan: (data) => request('/settings/scan', { method: 'PUT', body: JSON.stringify(data) }),
   resetAll: () => request('/settings/reset', { method: 'POST' }),
 };
 

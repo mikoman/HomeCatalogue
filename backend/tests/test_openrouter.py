@@ -40,7 +40,7 @@ def model_entry(model_id, inputs=None, outputs=None, parameters=None):
 
 def test_openrouter_save_and_local_restore_preserve_config_without_secrets(client):
     client.put("/api/settings/ai", json={"provider": "lmstudio", "base_url": "http://local/v1", "model": "local", "embedding_model": "embed"})
-    response = client.put("/api/settings/ai", json={"provider": "openrouter", "base_url": "https://untrusted.invalid/v1", "model": "vision", "api_key": "ignored"})
+    response = client.put("/api/settings/ai", json={"provider": "openrouter", "base_url": "https://untrusted.invalid/v1", "model": "vision"})
     assert response.status_code == 200
     assert response.json()["provider"] == response.json()["effective_provider"] == "openrouter"
     assert response.json()["base_url"] == openrouter.OPENROUTER_BASE_URL

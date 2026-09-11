@@ -29,7 +29,7 @@ def test_environment_provider_is_effective_without_a_stored_choice(settings_file
     assert config["provider"] == provider
     assert config["model"] == "chosen-vision-model"
     response = AISettingsRead(**store.settings_for_api())
-    assert response.provider == "ollama"
+    assert response.provider == provider
     assert response.effective_provider == provider
     assert response.effective_model == "chosen-vision-model"
     assert not any("key" in key for key in response.model_dump())

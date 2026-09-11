@@ -93,7 +93,7 @@ def health_check():
 
 
 # Serve the frontend in production
-FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "../../frontend/dist")
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
 def serve_frontend_file(full_path: str, directory: str | Path) -> FileResponse:

@@ -14,6 +14,10 @@ PROVIDER_URL_DEFAULTS = {
         "local": "http://localhost:1234/v1",
         "docker": f"http://{DOCKER_HOST}:1234/v1",
     },
+    "omlx": {
+        "local": "http://localhost:8000/v1",
+        "docker": f"http://{DOCKER_HOST}:8000/v1",
+    },
 }
 
 

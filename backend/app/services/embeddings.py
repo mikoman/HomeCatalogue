@@ -8,7 +8,7 @@ keyword search. Semantic search is a pure enhancement, never a hard dependency.
 import math
 import httpx
 
-from app.services.ai_settings_store import get_embedding_config
+from app.services.ai_settings_store import get_embedding_config, get_api_key
 
 
 def embed_text(text: str) -> list[float] | None:
@@ -18,15 +18,17 @@ def embed_text(text: str) -> list[float] | None:
         return None
     base_url = cfg["base_url"].rstrip("/")
     model = cfg["model"]
+    key = get_api_key(cfg["provider"], base_url)
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
     try:
         if cfg["provider"] == "ollama":
             with httpx.Client(timeout=30.0) as client:
-                r = client.post(f"{base_url}/api/embeddings", json={"model": model, "prompt": text})
+                r = client.post(f"{base_url}/api/embeddings", headers=headers, json={"model": model, "prompt": text})
             r.raise_for_status()
             return r.json().get("embedding") or None
         # OpenAI-compatible (LM Studio): base_url already includes /v1
         with httpx.Client(timeout=30.0) as client:
-            r = client.post(f"{base_url}/embeddings", json={"model": model, "input": text})
+            r = client.post(f"{base_url}/embeddings", headers=headers, json={"model": model, "input": text})
         r.raise_for_status()
         data = r.json().get("data") or []
         return data[0]["embedding"] if data else None
