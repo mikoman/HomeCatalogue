@@ -19,7 +19,7 @@ from app.services.ai_providers import PROVIDERS, CLOUD_URLS, LOCAL_PROVIDERS
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "SETTINGS_FILE", tmp_path / "ai_settings.json")
     monkeypatch.setattr(settings, "ai_provider", "ollama")
-    for provider in ("openai", "anthropic", "openrouter", "omlx"):
+    for provider in ("openai", "anthropic", "openrouter", "deepseek", "omlx"):
         monkeypatch.setattr(settings, f"{provider}_api_key", "")
     app = FastAPI()
     app.include_router(router)
@@ -55,18 +55,19 @@ def test_save_provider_key_and_model_then_reload(client, provider):
     assert store.get_api_key(provider) == "test-only-key"
 
 
-def test_save_inactive_profile_and_remove_key(client, monkeypatch):
-    monkeypatch.setattr(settings, "openrouter_api_key", "environment-test-key")
-    response = client.put("/api/settings/ai", json=payload("openrouter", api_key="saved-test-key", activate=False))
+@pytest.mark.parametrize("provider", ["openrouter", "deepseek"])
+def test_save_inactive_profile_and_remove_key(client, monkeypatch, provider):
+    monkeypatch.setattr(settings, f"{provider}_api_key", "environment-test-key")
+    response = client.put("/api/settings/ai", json=payload(provider, api_key="saved-test-key", activate=False))
     assert response.json()["effective_provider"] == "ollama"
-    assert store.get_api_key("openrouter") == "saved-test-key"
-    removed = client.put("/api/settings/ai", json=payload("openrouter", api_key_action="clear", activate=False))
+    assert store.get_api_key(provider) == "saved-test-key"
+    removed = client.put("/api/settings/ai", json=payload(provider, api_key_action="clear", activate=False))
     assert removed.status_code == 200
-    assert store.get_api_key("openrouter") == ""
-    assert removed.json()["providers"]["openrouter"]["environment_key_available"] is True
-    restored = client.put("/api/settings/ai", json=payload("openrouter", api_key_action="environment"))
-    assert restored.json()["effective_provider"] == "openrouter"
-    assert store.get_api_key("openrouter") == "environment-test-key"
+    assert store.get_api_key(provider) == ""
+    assert removed.json()["providers"][provider]["environment_key_available"] is True
+    restored = client.put("/api/settings/ai", json=payload(provider, api_key_action="environment"))
+    assert restored.json()["effective_provider"] == provider
+    assert store.get_api_key(provider) == "environment-test-key"
     assert "environment-test-key" not in store.SETTINGS_FILE.read_text()
 
 

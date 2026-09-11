@@ -6,6 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 LOCAL_PROVIDERS = ("ollama", "lmstudio", "omlx")
 CLOUD_URLS = {
     "openrouter": "https://openrouter.ai/api/v1",
+    "deepseek": "https://api.deepseek.com",
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
 }

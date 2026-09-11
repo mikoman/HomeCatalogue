@@ -3,12 +3,16 @@ export const PROVIDERS = [
   { id: 'lmstudio', label: 'LM Studio', local: true, hint: 'Local model server', example: 'Model ID from your server' },
   { id: 'omlx', label: 'oMLX', local: true, hint: 'Apple silicon server', example: 'Model ID from your server' },
   { id: 'openrouter', label: 'OpenRouter', local: false, hint: 'Cloud model catalogue', example: 'google/gemini-3.8-flash', keyUrl: 'https://openrouter.ai/keys' },
+  { id: 'deepseek', label: 'DeepSeek', local: false, hint: 'Flash vision API', example: 'deepseek-flash', keyUrl: 'https://platform.deepseek.com/api_keys' },
   { id: 'openai', label: 'OpenAI', local: false, hint: 'Direct cloud API', example: 'Vision model ID', keyUrl: 'https://platform.openai.com/api-keys' },
   { id: 'anthropic', label: 'Anthropic', local: false, hint: 'Direct Claude API', example: 'Vision model ID', keyUrl: 'https://platform.claude.com/settings/keys' },
 ];
 
 export function createDraft(config) {
-  return { base_url: config.base_url, model: config.model, embedding_model: config.embedding_model || '', api_key: '', api_key_action: 'keep' };
+  return {
+    base_url: config.base_url, model: config.model, embedding_model: config.embedding_model || '',
+    api_key: '', api_key_action: 'keep', deepseek: config.deepseek ? { ...config.deepseek } : null,
+  };
 }
 
 export function connectionPayload(provider, draft) {
@@ -21,12 +25,16 @@ export function connectionPayload(provider, draft) {
 }
 
 export function providerPayload(provider, draft, activate = true) {
-  return { ...connectionPayload(provider, draft), model: draft.model.trim(), embedding_model: draft.embedding_model.trim(), activate };
+  return {
+    ...connectionPayload(provider, draft), model: draft.model.trim(), embedding_model: draft.embedding_model.trim(), activate,
+    ...(provider === 'deepseek' && draft.deepseek ? { deepseek: { ...draft.deepseek, max_tokens: Number(draft.deepseek.max_tokens) } } : {}),
+  };
 }
 
 export function isDirty(draft, config) {
   return draft.base_url !== config.base_url || draft.model !== config.model
-    || draft.embedding_model !== (config.embedding_model || '') || !!draft.api_key || draft.api_key_action !== 'keep';
+    || draft.embedding_model !== (config.embedding_model || '') || !!draft.api_key || draft.api_key_action !== 'keep'
+    || (!!config.deepseek && Object.keys(config.deepseek).some(key => String(draft.deepseek?.[key]) !== String(config.deepseek[key])));
 }
 
 export function filterModels(models, query) {

@@ -2,7 +2,7 @@
 
 import time
 import httpx
-from app.services import openrouter
+from app.services import deepseek, openrouter
 from app.services.ai_providers import CLOUD_URLS, provider_url
 from app.services.ai_settings_store import get_api_key
 
@@ -27,6 +27,8 @@ async def fetch_models(provider: str, base_url: str, api_key: str) -> list[dict]
                     continue
                 model_id = entry.get("name") if provider == "ollama" else entry.get("id")
                 if isinstance(model_id, str) and model_id:
+                    if provider == "deepseek" and model_id not in deepseek.VISION_MODELS:
+                        continue
                     name = entry.get("display_name") or model_id
                     models[model_id] = {"id": model_id, "name": name if isinstance(name, str) else model_id}
             if provider != "anthropic" or not payload.get("has_more"):
@@ -78,7 +80,10 @@ async def test_connection(provider: str, base_url: str, api_key: str | None = No
         "ok": error is None,
         "message": error or (
             f"Connection accepted. {len(models)} models available. Model inference was not tested."
-            if models else "The server responded but returned no models. Install or load a vision model, then refresh the list."
+            if models else (
+                "DeepSeek accepted the connection but listed no supported vision models. Check model availability in your account."
+                if provider == "deepseek" else "The server responded but returned no models. Install or load a vision model, then refresh the list."
+            )
         ),
         "latency_ms": int((time.monotonic() - start) * 1000),
         "model_count": len(models),

@@ -5,7 +5,14 @@ from typing import Literal
 from pydantic import BaseModel, Field, SecretStr
 
 
-Provider = Literal["ollama", "lmstudio", "omlx", "openrouter", "openai", "anthropic"]
+Provider = Literal["ollama", "lmstudio", "omlx", "openrouter", "deepseek", "openai", "anthropic"]
+
+
+class DeepSeekSettings(BaseModel):
+    image_detail: Literal["original", "low", "high", "auto"] = "original"
+    thinking: Literal["disabled", "enabled"] = "disabled"
+    reasoning_effort: Literal["low", "high", "max"] = "high"
+    max_tokens: int = Field(default=8192, ge=256, le=393216)
 
 
 class ProviderSettingsRead(BaseModel):
@@ -15,6 +22,7 @@ class ProviderSettingsRead(BaseModel):
     api_key_configured: bool
     api_key_source: Literal["saved", "environment", "none"]
     environment_key_available: bool
+    deepseek: DeepSeekSettings | None = None
 
 
 class ScanSettings(BaseModel):
@@ -60,6 +68,7 @@ class AISettingsUpdate(AIProviderRequest):
     model: str = Field(..., min_length=1, max_length=255)
     embedding_model: str | None = Field(default=None, max_length=255)
     activate: bool = True
+    deepseek: DeepSeekSettings | None = None
 
 
 class DetectorSettingsUpdate(BaseModel):

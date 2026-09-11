@@ -11,7 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from app.config import settings
 from app.services.ai_settings_store import get_effective_ai_config, get_box_source, get_provider_config, get_api_key, get_scan_config
 from app.services.detector import detect_boxes
-from app.services import openrouter
+from app.services import deepseek, openrouter
 from app.schemas.scan import ScanResult, AIItem, AIContainer
 
 
@@ -126,6 +126,7 @@ async def process_image_with_ai(
     dispatch = {
         "openai": _process_openai,
         "openrouter": _process_openrouter,
+        "deepseek": _process_deepseek,
         "anthropic": _process_anthropic,
         "ollama": _process_ollama,
         "lmstudio": _process_lmstudio,
@@ -465,6 +466,54 @@ async def _process_openrouter(image_path: str, system_prompt: str, user_prompt: 
         "provider": {"require_parameters": True, "data_collection": "deny"},
     })
     return _parse_scan_result(content)
+
+
+async def _process_deepseek(image_path: str, system_prompt: str, user_prompt: str) -> ScanResult:
+    """Analyze a photo with DeepSeek vision and an explicit JSON example."""
+    ai = get_provider_config("deepseek")
+    options = ai["deepseek"]
+    api_key = get_api_key("deepseek")
+    image_b64 = await run_in_threadpool(_encode_image, image_path)
+    example = {
+        "proposed_containers": [],
+        "items": [{
+            "name": "Mug", "category": "Kitchen", "tags": ["mug"],
+            "suggested_container": "", "confidence_score": 0.9,
+            "detection_label": "mug", "bbox": None,
+        }],
+    }
+    payload = {
+        "model": ai["model"],
+        "messages": [
+            {"role": "system", "content": (
+                system_prompt + "\n\nJSON schema:\n" + json.dumps(JSON_SCHEMA)
+                + "\n\nExample JSON format only. Do not copy the example item unless it appears in the photo:\n"
+                + json.dumps(example)
+            )},
+            {"role": "user", "content": [
+                {"type": "text", "text": user_prompt},
+                {"type": "image_url", "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_b64}",
+                    "detail": options["image_detail"],
+                }},
+            ]},
+        ],
+        "stream": False,
+        "max_tokens": options["max_tokens"],
+        "response_format": {"type": "json_object"},
+        "thinking": {"type": options["thinking"]},
+    }
+    if options["thinking"] == "enabled":
+        payload["reasoning_effort"] = options["reasoning_effort"]
+    else:
+        payload["temperature"] = 0.1
+    content = await deepseek.complete(payload, api_key)
+    try:
+        # JSON mode must return a complete JSON object before inventory parsing.
+        json.loads(content)
+        return _parse_scan_result(content)
+    except ValueError:
+        raise deepseek.DeepSeekOutputError("DeepSeek returned an invalid inventory. Retry the scan or check its model settings.") from None
 
 
 async def _process_openai_compatible(

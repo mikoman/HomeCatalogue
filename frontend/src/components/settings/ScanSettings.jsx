@@ -4,7 +4,7 @@ import { Feedback } from './ProviderSettings';
 
 const FIELDS = [
   { id: 'scan_max_edge', label: 'Maximum image edge', unit: 'pixels', min: 256, max: 4096, help: 'The backend resizes the photo before inference. Larger images can improve small objects and use more memory.' },
-  { id: 'scan_max_tokens', label: 'Maximum output', unit: 'tokens', min: 256, max: 32768, help: 'This limit applies to all scan providers. Increase it if the model truncates an inventory.' },
+  { id: 'scan_max_tokens', label: 'Maximum output', unit: 'tokens', min: 256, max: 32768, help: 'Increase this limit if the model truncates an inventory. DeepSeek uses its own output limit under Providers and models.' },
   { id: 'ollama_num_ctx', label: 'Ollama context', unit: 'tokens', min: 2048, max: 131072, help: 'This limit applies to Ollama. Configure context in LM Studio or oMLX on its model server.' },
 ];
 const MODES = [

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { aiSettings } from '../../api/client';
 import { PROVIDERS, createDraft, connectionPayload, providerPayload, isDirty, filterModels } from '../../utils/settings-draft';
+import DeepSeekSettings from './DeepSeekSettings';
 
 export function Feedback({ result }) {
   if (!result) return null;
@@ -191,8 +192,8 @@ export default function ProviderSettings({ settings, onSaved, onDirty }) {
                 </button>)}
                 {!filteredModels.length && <p className="p-3 text-sm text-surface-400">No models match this search. You can enter the model ID above.</p>}
               </div>
-            </> : <p className="text-sm text-surface-400">The server returned no models. Install or load a vision model in your model server.</p>}
-            <p className="text-xs text-surface-400 mt-2">{provider === 'openrouter' ? 'This list includes image models that advertise structured output.' : 'This list can include text and embedding models. Select a model that accepts images.'}</p>
+            </> : <p className="text-sm text-surface-400">{provider === 'deepseek' ? 'DeepSeek listed no supported vision models. Check model availability in your account.' : 'The server returned no models. Install or load a vision model in your model server.'}</p>}
+            <p className="text-xs text-surface-400 mt-2">{provider === 'deepseek' ? 'This list includes the documented Flash vision models. Use deepseek-flash for new scans.' : provider === 'openrouter' ? 'This list includes image models that advertise structured output.' : 'This list can include text and embedding models. Select a model that accepts images.'}</p>
           </div>}
           {current.local && <details className="text-sm text-surface-300">
             <summary className="cursor-pointer py-2">Model guidance for 32 GB RAM</summary>
@@ -204,6 +205,7 @@ export default function ProviderSettings({ settings, onSaved, onDirty }) {
             </div>
           </details>}
         </div>
+        {provider === 'deepseek' && <DeepSeekSettings value={draft.deepseek} onChange={value => edit('deepseek', value)} />}
         {current.local && <div className="border-t border-surface-800 pt-5">
           <label htmlFor="embedding-model" className="field-label">Embedding model (optional)</label>
           <input id="embedding-model" value={draft.embedding_model} maxLength={255} onChange={event => edit('embedding_model', event.target.value)} className="input-field text-sm" placeholder="Text embedding model ID" />

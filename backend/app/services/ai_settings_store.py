@@ -5,8 +5,10 @@ import os
 import tempfile
 from pathlib import Path
 from threading import RLock
+from pydantic import ValidationError
 
 from app.config import settings
+from app.schemas.settings import DeepSeekSettings
 from app.runtime_env import default_provider_url, running_in_docker, suggested_provider_urls
 from app.services.ai_providers import CLOUD_URLS, LOCAL_PROVIDERS, PROVIDERS, provider_url
 
@@ -31,6 +33,7 @@ def _defaults() -> dict:
         "detector_base_url": settings.detector_base_url,
         "detector_enabled": False,
         "_credentials": {},
+        "deepseek": DeepSeekSettings().model_dump(),
         **{name: getattr(settings, name) for name in _SCAN_LIMITS},
     }
     for provider in PROVIDERS:
@@ -56,6 +59,10 @@ def load_settings() -> dict:
     for name, (minimum, maximum) in _SCAN_LIMITS.items():
         if not minimum <= data[name] <= maximum:
             data[name] = getattr(settings, name)
+    try:
+        data["deepseek"] = DeepSeekSettings.model_validate(data["deepseek"]).model_dump()
+    except ValidationError:
+        data["deepseek"] = DeepSeekSettings().model_dump()
     return data
 
 
@@ -93,6 +100,7 @@ def get_provider_config(provider: str, data: dict | None = None) -> dict:
         "provider": provider,
         "base_url": CLOUD_URLS.get(provider, data.get(f"{provider}_base_url", "")).rstrip("/"),
         "model": data[f"{provider}_model"],
+        **({"deepseek": data["deepseek"]} if provider == "deepseek" else {}),
     }
 
 
@@ -173,6 +181,8 @@ def apply_provider_settings(data, stored: dict) -> None:
         if data.embedding_model is not None:
             stored[f"{provider}_embedding_model"] = data.embedding_model.strip()
     stored[f"{provider}_model"] = data.model.strip()
+    if provider == "deepseek" and data.deepseek is not None:
+        stored["deepseek"] = data.deepseek.model_dump()
     if data.activate:
         stored["provider"] = provider
 
@@ -217,6 +227,7 @@ def settings_for_api() -> dict:
             "embedding_model": data.get(f"{name}_embedding_model", ""),
             "api_key_configured": bool(key), "api_key_source": source,
             "environment_key_available": bool(_environment_key(name)),
+            **({"deepseek": config["deepseek"]} if name == "deepseek" else {}),
         }
     return {
         **effective,

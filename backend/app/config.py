@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o")
     openrouter_api_key: str = ""
     openrouter_model: str = "google/gemini-3.8-flash"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-flash"
     scan_max_tokens: int = Field(default=4096, ge=256, le=32768)
     ollama_num_ctx: int = Field(default=8192, ge=2048, le=131072)
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")

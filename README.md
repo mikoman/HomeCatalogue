@@ -43,7 +43,7 @@ See the [model research](docs/model-research.md) for model comparisons and sourc
 | Feature | Description |
 |---|---|
 | Photo scans | A vision model identifies visible items and proposes containers. |
-| Local and cloud inference | Select Ollama, LM Studio, oMLX, OpenRouter, OpenAI, or Anthropic in Settings. |
+| Local and cloud inference | Select Ollama, LM Studio, oMLX, OpenRouter, DeepSeek, OpenAI, or Anthropic in Settings. |
 | Provider settings | Configure providers, API keys, local server URLs, and models. Test connections and search model lists. |
 | Background analysis | Upload multiple photographs. The server retains scan progress after a page refresh. |
 | Container scans | Catalogue the visible contents of a drawer, bin, suitcase, or other container. |
@@ -53,7 +53,7 @@ See the [model research](docs/model-research.md) for model comparisons and sourc
 | Item movement | Move items or complete container branches between rooms. |
 | Scan review | Correct names and destinations. Exclude false detections before saving. |
 | Mobile access | Use a responsive interface, camera capture, and an installable progressive web app (PWA). |
-| Structured responses | Requests include a JSON Schema. The backend checks inventory fields. Ollama and OpenRouter also reject truncated completions. |
+| Structured responses | Requests include a JSON Schema. The backend checks inventory fields. Ollama, OpenRouter, and DeepSeek also reject truncated completions. |
 | Docker support | Use Docker Compose, builds with multiple stages, and automatic development reloads. |
 
 ## Interface
@@ -82,7 +82,7 @@ The style configuration is in [tailwind.config.js](frontend/tailwind.config.js) 
 | Backend | Python, FastAPI, SQLAlchemy, Pydantic v2 |
 | Database | SQLite |
 | Local AI | Ollama, LM Studio with an OpenAI-compatible API |
-| Cloud AI | OpenRouter, or direct OpenAI and Anthropic connections |
+| Cloud AI | OpenRouter, or direct DeepSeek, OpenAI, and Anthropic connections |
 | Deployment | Docker, Docker Compose, Nginx |
 
 ## Quick start
@@ -148,7 +148,7 @@ Open **Settings** at `/settings`. The page has three sections:
 
 | Section | Controls |
 |---|---|
-| **Providers and models** | Six providers, server URLs, API keys, connection tests, model search, and embedding models |
+| **Providers and models** | Seven providers, server URLs, API keys, connection tests, model search, and embedding models |
 | **Scans and boxes** | Box source, detector URL, detector test, image size, output limit, and Ollama context |
 | **Catalogue data** | Search reindex, storage information, and catalogue reset |
 
@@ -176,7 +176,7 @@ Save each edited section before leaving Settings.
 Use `host.docker.internal` to reach a host service from the Docker backend.
 Use `localhost` when the backend and model server run directly on the same machine.
 Settings provides buttons for these addresses.
-OpenRouter, OpenAI, and Anthropic use constant official HTTPS endpoints.
+OpenRouter, DeepSeek, OpenAI, and Anthropic use constant official HTTPS endpoints.
 
 Local model lists can include text and embedding models. Select a model that accepts images.
 OpenRouter lists image models that advertise structured output.
@@ -271,6 +271,44 @@ Settings also identifies the provider and model that new scans will use.
 The Docker deployment stores runtime choices and saved keys in `storage/ai_settings.json`.
 Use `AI_SETTINGS_FILE` to change that path.
 An existing `llava` selection remains active until you select a replacement.
+
+### DeepSeek
+
+To configure DeepSeek:
+
+1. Open **Settings → Providers and models → DeepSeek**.
+2. Enter a [DeepSeek API key](https://platform.deepseek.com/api_keys).
+3. Select **Test connection**.
+4. Keep `deepseek-flash` as the vision model.
+5. Adjust **DeepSeek scan settings** if necessary.
+6. Select **Save and use provider**.
+
+You can also set `DEEPSEEK_API_KEY` and `DEEPSEEK_MODEL` in the backend environment.
+Restart the backend after environment changes. A saved key overrides the environment key.
+DeepSeek uses the existing key replacement, removal, and environment restoration controls.
+
+The app sends JPEG images as base64 data URLs to `https://api.deepseek.com/chat/completions`.
+Connection tests only read `/models`. They do not generate output or send photos.
+The model list includes documented Flash vision IDs and excludes text models.
+
+| DeepSeek setting | Initial value | Effect |
+|---|---|---|
+| Vision model | `deepseek-flash` | Processes photos. |
+| Image detail | `original` | Preserves the image supplied by the app. `low` reduces it to 512 × 512. |
+| Thinking mode | Disabled | Limits additional reasoning work. Enable it for comparison on difficult photos. |
+| Reasoning effort | `high` | Applies when thinking is enabled. Options are `low`, `high`, and `max`. |
+| Output limit | `8192` tokens | Includes thinking and inventory output. Replaces the shared output limit for DeepSeek scans. |
+| JSON output | Always enabled | Sends `response_format: {"type": "json_object"}` with a schema and JSON example in the prompt. |
+
+The maximum image edge under **Scans and boxes** still applies before upload.
+DeepSeek's `high` and `auto` detail options currently have the same effect as `original`.
+The backend validates JSON and rejects empty or incomplete output. An invalid inventory receives one repair attempt.
+If output remains truncated, increase the DeepSeek output limit or scan a smaller area.
+Scans send photos and container context to DeepSeek. Charges can apply.
+
+These settings follow the [vision guide](https://api-docs.deepseek.com/guides/vision),
+[JSON output guide](https://api-docs.deepseek.com/guides/json_mode), and
+[thinking guide](https://api-docs.deepseek.com/guides/thinking_mode).
 
 ### OpenRouter
 
@@ -863,7 +901,7 @@ Detector adapter tests use model substitutes, so backend tests do not download w
 The September 2026 implementation check ran YOLOE-26s on CPU with a synthetic blank image and an Ultralytics example photograph.
 That check covered runtime compatibility and box serialization.
 It did not establish household accuracy, CUDA or MPS support, or peak memory use on a 32 GB machine.
-The setup tests cover all six providers with simulated HTTP responses and temporary settings files.
+The setup tests cover all seven providers with simulated HTTP responses and temporary settings files.
 They check credential replacement, endpoint binding, scan limits, pagination, and safe error responses.
 Frontend tests check draft handling, model search, and credential requests.
 Browser checks use a separate test database and synthetic provider responses.
@@ -885,10 +923,12 @@ Set detector variables in the separate detector process environment.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AI_PROVIDER` | `ollama` | Select `ollama`, `lmstudio`, `openrouter`, `openai`, `anthropic`, or `omlx`. |
+| `AI_PROVIDER` | `ollama` | Select `ollama`, `lmstudio`, `openrouter`, `deepseek`, `openai`, `anthropic`, or `omlx`. |
 | `OPENROUTER_API_KEY` | Empty | OpenRouter key on the backend. Restart the backend after changing it. |
 | `OPENROUTER_MODEL` | `google/gemini-3.8-flash` | Initial OpenRouter model. Settings overrides it. |
-| `SCAN_MAX_TOKENS` | `4096` | Initial output limit for all scan providers. Settings overrides it. |
+| `DEEPSEEK_API_KEY` | Empty | DeepSeek key on the backend. A saved key overrides it. |
+| `DEEPSEEK_MODEL` | `deepseek-flash` | Initial DeepSeek vision model. Settings overrides it. |
+| `SCAN_MAX_TOKENS` | `4096` | Initial output limit. DeepSeek uses its separate output limit in Settings. |
 | `OLLAMA_NUM_CTX` | `8192` | Initial context size for Ollama. Settings overrides it. |
 | `SCAN_MAX_EDGE` | `1280` | Initial maximum image edge. Settings overrides it. |
 | `DETECTOR_BASE_URL` | `http://host.docker.internal:8077` | Initial detector URL. Settings overrides it. |
