@@ -9,6 +9,10 @@ import ItemDetailLightbox from './ItemDetailLightbox';
 import ContainerTree from './ContainerTree';
 import MovePicker from './MovePicker';
 import { groupItemsByName } from '../utils/groupItems';
+import { itemLocationLabels } from '../utils/itemLocations';
+import ItemPhoto from './ItemPhoto';
+import ThemeToggle from './ThemeToggle';
+import Icon from './Icon';
 
 
 function Thumb({ url }) {
@@ -24,12 +28,12 @@ function Thumb({ url }) {
   );
 }
 
-export default function RoomView() {
+export default function RoomView({ houses = [] }) {
   const { roomId } = useParams();
-  return <RoomContent key={roomId} roomId={roomId} />;
+  return <RoomContent key={roomId} roomId={roomId} houses={houses} />;
 }
 
-function RoomContent({ roomId }) {
+function RoomContent({ roomId, houses }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef(null);
@@ -51,6 +55,7 @@ function RoomContent({ roomId }) {
   const [notice, setNotice] = useState(null);
   const [itemSearch, setItemSearch] = useState('');
   const [showAddItem, setShowAddItem] = useState(false);
+  const [showContainers, setShowContainers] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('');
   const [addingItem, setAddingItem] = useState(false);
@@ -60,6 +65,11 @@ function RoomContent({ roomId }) {
   const [reviewingScanId, setReviewingScanId] = useState(null);
   const [hoveredItem, setHoveredItem] = useState(null);  // item index whose box is highlighted
   const [selectedContainer, setSelectedContainer] = useState(() => Number(searchParams.get('container')) || null);
+  useEffect(() => {
+    const capture = () => { captureTargetRef.current = selectedContainer; fileInputRef.current?.click(); };
+    window.addEventListener('catalogue:capture', capture);
+    return () => window.removeEventListener('catalogue:capture', capture);
+  }, [selectedContainer]);
   const [filterCategory, setFilterCategory] = useState(null);
   const [selectedItemIds, setSelectedItemIds] = useState(new Set());  // multi-select for item moves
   const [movingItems, setMovingItems] = useState(null);               // number[] when item-move picker is open
@@ -332,9 +342,7 @@ function RoomContent({ roomId }) {
     ? containers.find(c => c.id === selectedContainer)
     : null;
   const isEmptyContainerView = selectedContainer && locationItems.length === 0;
-  const chipBase = 'text-sm min-h-11 px-3 py-2 rounded-md border transition-colors whitespace-nowrap';
-  const chipOn = 'bg-primary-500 text-surface-950 border-primary-500';
-  const chipOff = 'bg-surface-900 text-surface-400 border-surface-700 hover:border-surface-600';
+  const houseName = houses.find(house => house.id === room?.house_id)?.name || 'My home';
 
   if (loading) {
     return (
@@ -357,47 +365,45 @@ function RoomContent({ roomId }) {
   }
 
   return (
-    <div className="space-y-6 min-w-0 max-w-full">
+    <div className="space-y-3 min-w-0 max-w-full">
       {/* Room header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="min-w-0">
           <button
             onClick={() => navigate(`/houses/${room.house_id}`)}
-            className="font-mono text-[0.7rem] uppercase tracking-wider text-surface-500 hover:text-primary-400 mb-2 flex items-center gap-1.5 transition-colors"
+            className="text-sm text-surface-400 hover:text-primary-400 min-h-11 -mt-3 mb-1 flex items-center gap-2 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            House
+            {houseName}<span aria-hidden="true">/</span><span>{room.name}</span>
           </button>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-surface-100 break-words">{room.name}</h1>
-          {room.description && (
-            <p className="text-surface-400 mt-1">{room.description}</p>
-          )}
-          <p className="mt-2 font-mono text-[0.7rem] text-surface-500 tracking-wider">
-            {items.length} {items.length === 1 ? 'ITEM' : 'ITEMS'}
+          <h1 className="font-display text-4xl sm:text-5xl font-medium tracking-tight text-surface-100 break-words">{room.name}</h1>
+          <p className="mt-2 text-sm text-surface-400">
+            {items.length} {items.length === 1 ? 'item' : 'items'}
             <span className="text-surface-700"> · </span>
-            {containers.length} {containers.length === 1 ? 'CONTAINER' : 'CONTAINERS'}
+            {containers.length} {containers.length === 1 ? 'container' : 'containers'}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
         <button
           onClick={() => openCapture('camera')}
-          className="btn-primary min-h-12 flex-1 sm:flex-none relative"
+          className="btn-primary min-h-12 flex-1 sm:flex-none relative whitespace-nowrap"
+          aria-label="Scan a space"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          Take photo
+          <span>Scan<span className="hidden sm:inline"> a space</span></span>
           {inFlight.length > 0 && (
             <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-surface-950/40 text-[0.65rem] font-mono font-bold text-primary-300">
               {inFlight.length}
             </span>
           )}
         </button>
-          <button onClick={() => openCapture('library')} className="btn-secondary min-h-12 flex-1 sm:flex-none">Choose photos</button>
-          <button onClick={() => setShowAddItem(previous => !previous)} aria-expanded={showAddItem} aria-controls="add-item-form" className="btn-secondary min-h-12 flex-1 sm:flex-none">Add item</button>
+          <button onClick={() => openCapture('library')} className="min-h-11 px-2 sm:px-3 text-sm text-surface-300 hover:text-primary-400">Choose photos</button>
+          <button onClick={() => setShowAddItem(previous => !previous)} aria-expanded={showAddItem} aria-controls="add-item-form" className="min-h-11 px-2 sm:px-3 text-sm text-surface-300 hover:text-primary-400">Add item</button>
         </div>
       </div>
 
@@ -411,9 +417,7 @@ function RoomContent({ roomId }) {
       />
 
       <input ref={libraryInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
-      <p className="text-sm text-surface-400 !mt-3">
-        {selectedContainerRecord ? `New photos go into ${containerLocationLabel(selectedContainerRecord, containers)}.` : 'Photograph a shelf, drawer, or group of items.'} Review the list before saving.
-      </p>
+      {selectedContainerRecord && <p className="text-sm text-surface-400 !mt-3">New photos go into {containerLocationLabel(selectedContainerRecord, containers)}. Review the list before saving.</p>}
       {notice && <p role="status" className="text-primary-400">{notice}</p>}
       {relocated.map(entry => <p key={entry.sessionId} role="status" className="text-surface-300">A scan moved with its container. <button className="underline text-primary-400" onClick={() => navigate(`/rooms/${entry.roomId}?review=${encodeURIComponent(entry.sessionId)}`)}>Open its current room</button></p>)}
       {loadError && <p role="alert" className="text-red-400">{loadError} <button className="underline" onClick={loadData}>Try again</button></p>}
@@ -512,30 +516,14 @@ function RoomContent({ roomId }) {
       {/* Scan result overlay — bound to the selected scan, not a single global result */}
       {reviewingScan && createPortal(
         <dialog ref={reviewDialogRef} aria-labelledby="scan-review-title" onCancel={(event) => { event.preventDefault(); if (!savingRef.current) setReviewingScanId(null); }} className="fixed inset-0 m-0 w-full h-dvh max-w-none max-h-none bg-surface-950 text-surface-300 p-0 open:flex flex-col safe-top">
-          <div className="hazard h-1 w-full shrink-0" />
           <div ref={reviewContentRef} className="flex-1 overflow-y-auto min-h-0">
-            <div className="max-w-2xl mx-auto px-4 py-6">
-            <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+            <div className="max-w-3xl mx-auto px-4 sm:px-8 py-4">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div>
-                <h3 id="scan-review-title" className="font-display text-2xl font-bold text-surface-100">Review your photo</h3>
-                <p className="text-sm text-surface-400 mt-1">Edit names, remove unwanted items, then save.</p>
-                {reviewingScan.containerName && (
-                  <p className="text-sm text-surface-400 mt-1">
-                    Items will be filed in <span className="text-primary-400">{reviewingScan.containerName}</span>
-                  </p>
-                )}
+                <h3 id="scan-review-title" className="font-display text-2xl font-medium text-surface-100">Review photo</h3>
+                <p className="text-sm text-surface-400 mt-1">{room.name}{reviewingScan.containerName ? ` / ${reviewingScan.containerName}` : ''}</p>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleRescan(reviewingScanId)}
-                  className="btn-secondary text-sm mr-2" disabled={saving}
-                  title="Re-run AI analysis on this photo"
-                >
-                  <svg className="w-4 h-4 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Analyse again
-                </button>
                 <button
                   onClick={() => setReviewingScanId(null)}
                   className="p-3 text-surface-400 hover:text-surface-200 transition-colors" disabled={saving}
@@ -547,12 +535,16 @@ function RoomContent({ roomId }) {
                 </button>
               </div>
             </div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <ThemeToggle />
+              <button onClick={() => handleRescan(reviewingScanId)} className="min-h-11 px-2 text-sm text-surface-400 hover:text-primary-400" disabled={saving}>Analyse again</button>
+            </div>
 
             {/* Source image */}
             {reviewingScan.imageUrl && (
-              <details className="mb-6">
-                <summary className="cursor-pointer py-3 text-surface-200">View photo and item locations</summary>
-                <div className="relative rounded-lg overflow-hidden border border-surface-800">
+              <details className="mb-2" open>
+                <summary className="cursor-pointer min-h-11 flex items-center text-sm text-surface-200">Photo and item locations</summary>
+                <div className="relative rounded-sm overflow-hidden border border-surface-800 max-w-72 mx-auto">
                   <img src={reviewingScan.imageUrl} alt="Scanned area" className="w-full h-auto block" />
                   {/* Detector boxes — normalized 0..1, so % positioning lines up at any size */}
                   {reviewingScan.result?.items.map((item, i) => {
@@ -577,7 +569,7 @@ function RoomContent({ roomId }) {
 
             {/* Items to review */}
             <div className="mb-6">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
                 <p className="font-semibold text-surface-100">{selectedReviewCount} selected of {(reviewingScan.result?.items.length || 0) + (reviewingScan.result?.proposed_containers.length || 0)} found</p>
                 <button className="btn-secondary text-sm" disabled={saving} onClick={() => setScans(previous => previous.map(entry => entry.sessionId === reviewingScanId ? { ...entry, itemSkip: entry.result.items.map(() => selectedReviewCount > 0), proposedSkip: entry.result.proposed_containers.map(() => selectedReviewCount > 0) } : entry))}>{selectedReviewCount ? 'Deselect all' : 'Select all'}</button>
               </div>
@@ -587,6 +579,12 @@ function RoomContent({ roomId }) {
                   const isContainer = reviewingScan.containerFlags?.[i] ?? false;
                   const dupe = reviewingScan.dupeMatches?.[i] || null;
                   const skipped = reviewingScan.itemSkip?.[i] ?? false;
+                  const target = reviewingScan.itemTargets?.[i] || { kind: 'loose' };
+                  const targetContainer = reviewingScan.existingContainers?.find(container => container.id === target.containerId);
+                  const destination = target.kind === 'existing' && targetContainer
+                    ? containerLocationLabel(targetContainer, reviewingScan.existingContainers)
+                    : target.kind === 'proposed' ? `${target.name} (new)`
+                    : target.kind === 'missing' ? `${target.name} — choose a location` : room.name;
                   return (
                   <div
                     key={i}
@@ -594,12 +592,16 @@ function RoomContent({ roomId }) {
                     onFocus={() => setHoveredItem(i)}
                     onMouseLeave={() => setHoveredItem(null)}
                     onBlur={() => setHoveredItem(null)}
-                    className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'border-dashed' : ''} ${hoveredItem === i && item.bbox ? 'ring-1 ring-primary-500/50' : ''}`}
+                    className={`folio-review-item ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'border-dashed opacity-60' : ''} ${hoveredItem === i && item.bbox ? 'ring-1 ring-primary-500/50' : ''}`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2">
                       <label className="min-w-11 min-h-11 grid place-items-center cursor-pointer">
                         <input type="checkbox" checked={!skipped} onChange={(event) => handleItemSkipChange(i, !event.target.checked)} aria-label={`Include ${item.name || `item ${i + 1}`}`} className="w-5 h-5 accent-primary-500" />
                       </label>
+                      {reviewingScan.imageUrl && <span className="w-12 h-16 shrink-0 rounded-sm overflow-hidden bg-surface-900" aria-hidden="true">
+                        <ItemPhoto src={reviewingScan.imageUrl} bbox={item.bbox} />
+                      </span>}
+                      <div className="flex-1 min-w-0">
                       <input
                         type="text"
                         value={item.name}
@@ -608,22 +610,13 @@ function RoomContent({ roomId }) {
                         maxLength={255}
                         className="input-field text-base flex-1 min-w-0"
                       />
+                      <p className={`text-sm mt-1 break-words ${target.kind === 'missing' ? 'text-red-400' : 'text-surface-400'}`}>{isContainer ? 'Place under' : 'Save in'}: {destination}</p>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2 pl-9">
-                      {item.category && <span className="tag">{item.category}</span>}
-                      {item.suggested_container && !isContainer && (
-                        <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">{item.suggested_container}</span>
-                      )}
-                      {isContainer && (
-                        <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">Container</span>
-                      )}
-                      {item.confidence_score < 0.8 && (
-                        <span className="badge-low">Low confidence</span>
-                      )}
-                    </div>
-                    {dupe && <p className="text-sm text-primary-400 mt-2 pl-1">Possible match: “{dupe.name}” is already in this room. Deselect this item if it is the same object.</p>}
-                    <details className="mt-2 pl-1" open={reviewingScan.itemTargets?.[i]?.kind === 'missing' ? true : undefined}>
-                      <summary className="cursor-pointer text-sm text-surface-300 py-2">Location and category</summary>
+                    {item.confidence_score < 0.8 && <p className="text-sm text-red-400 mt-1">Low confidence. Check this item.</p>}
+                    {dupe && <p className="text-sm text-primary-400 mt-2">Possible match: “{dupe.name}”. Deselect if this is the same object.</p>}
+                    <details className="mt-1" open={reviewingScan.itemTargets?.[i]?.kind === 'missing' ? true : undefined}>
+                      <summary className="cursor-pointer text-sm text-surface-300 min-h-11 py-3">{item.category ? `${item.category} · ` : ''}Edit location and category</summary>
                       <label className="block text-sm text-surface-400 mt-2">Category
                         <input value={item.category || ''} onChange={(event) => handleEditItem(i, 'category', event.target.value)} className="input-field text-base mt-1" maxLength={100} />
                       </label>
@@ -706,7 +699,7 @@ function RoomContent({ roomId }) {
           </div>
 
           {/* Actions — always visible, pinned outside the scroll area */}
-          <div className="shrink-0 border-t border-surface-800 bg-surface-950/95 backdrop-blur-sm">
+          <div className="shrink-0 border-t border-surface-800 bg-surface-950">
             {saveError && <p role="alert" className="max-w-2xl mx-auto px-4 pt-3 text-red-400">{saveError} Your changes remain here. Try saving again.</p>}
             <div className="max-w-2xl mx-auto px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex gap-3">
               <button
@@ -720,29 +713,29 @@ function RoomContent({ roomId }) {
                 className="btn-primary flex-1"
                 disabled={saving || !reviewingScan.existingContainers || selectedReviewCount === 0}
               >
-                {saving ? 'Saving…' : `Save selected${ready.length > 1 ? ' and review next' : ''}`}
+                {saving ? 'Saving…' : `Save ${selectedReviewCount} selected${ready.length > 1 ? ' and review next' : ''}`}
               </button>
             </div>
           </div>
         </dialog>, document.body
       )}
 
-      {items.length > 0 && <label className="block text-sm text-surface-400">Find in this room<input type="search" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} className="input-field text-base mt-2" placeholder="Search names, categories, or tags" /></label>}
+      {items.length > 0 && <label className="block relative"><span className="sr-only">Find in this room</span><Icon name="search" className="absolute left-3 top-3.5 w-4 h-4 text-surface-500" /><input type="search" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} className="input-field text-base pl-10" placeholder={`Find something in ${room.name}`} /></label>}
       {/* Filters */}
       {(containers.length > 0 || categories.length > 0) && (
-        <div className="min-w-0 max-w-full overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-6 sm:px-6">
+        <div className="min-w-0 max-w-full overflow-x-auto border-b border-surface-800">
           <div className="flex gap-2 w-max max-w-none">
           <button
             onClick={() => { setSelectedContainer(null); setFilterCategory(null); }}
-            className={`${chipBase} ${!selectedContainer && !filterCategory ? chipOn : chipOff}`}
+            className="folio-tab" aria-pressed={!selectedContainer && !filterCategory}
           >
-            All · {items.length}
+            All items
           </button>
           {containers.map(container => (
             <button
               key={container.id}
               onClick={() => { setFilterCategory(null); setSelectedContainer(selectedContainer === container.id ? null : container.id); }}
-              className={`${chipBase} ${selectedContainer === container.id ? chipOn : chipOff}`}
+              className="folio-tab" aria-pressed={selectedContainer === container.id}
             >
               {containerLocationLabel(container, containers)}
             </button>
@@ -751,7 +744,7 @@ function RoomContent({ roomId }) {
             <button
               key={category}
               onClick={() => { setSelectedContainer(null); setFilterCategory(filterCategory === category ? null : category); }}
-              className={`${chipBase} ${filterCategory === category ? chipOn : chipOff}`}
+              className="folio-tab" aria-pressed={filterCategory === category}
             >
               {category}
             </button>
@@ -761,9 +754,9 @@ function RoomContent({ roomId }) {
       )}
 
       {/* Container tree */}
-      {containers.length > 0 && (
-        <div className="card min-w-0 overflow-hidden">
-          <p className="eyebrow mb-2">Containers</p>
+      {containers.length > 0 && showContainers && (
+        <section id="room-containers" aria-label="Manage containers" className="card min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between mb-2"><h2 className="text-lg text-surface-100">Containers</h2><button type="button" className="icon-button" onClick={() => setShowContainers(false)} aria-label="Close container management"><Icon name="close" /></button></div>
           <ContainerTree
             containers={containers}
             roomId={roomId}
@@ -771,24 +764,24 @@ function RoomContent({ roomId }) {
             onSelect={(id) => { setFilterCategory(null); setSelectedContainer(selectedContainer === id ? null : id); }}
             onMoved={loadData}
           />
-        </div>
+        </section>
       )}
 
       {/* Selection-mode toolbar */}
-      {filteredItems.length > 0 && (
-        <div className="flex items-center justify-between gap-3 -mx-4 px-4 sm:-mx-6 sm:px-6">
+      {(filteredItems.length > 0 || containers.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 !mt-2">
           <div className="flex items-center gap-2">
-            <button
+            {filteredItems.length > 0 && <button
               type="button"
               onClick={toggleSelectMode}
-              className={selectMode ? 'btn-primary text-xs' : 'btn-secondary text-xs'}
+              className={`min-h-11 inline-flex items-center gap-2 px-1 text-sm ${selectMode ? 'text-primary-400 font-semibold' : 'text-surface-400'}`}
               aria-pressed={selectMode}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
               {selectMode ? 'Selecting' : 'Select'}
-            </button>
+            </button>}
             {selectMode && (
               <button
                 type="button"
@@ -799,6 +792,7 @@ function RoomContent({ roomId }) {
               </button>
             )}
           </div>
+          {containers.length > 0 && <button type="button" className="min-h-11 text-sm text-surface-400 hover:text-primary-400 px-1" aria-expanded={showContainers} aria-controls="room-containers" onClick={() => setShowContainers(value => !value)}>Manage containers</button>}
           {selectMode && selectedItemIds.size > 0 && (
             <span className="text-xs text-surface-400 font-mono">
               {selectedItemIds.size} {selectedItemIds.size === 1 ? 'item' : 'items'}
@@ -853,13 +847,14 @@ function RoomContent({ roomId }) {
         </div>
       ) : (
         <>
-          <div className="grid gap-3 min-w-0 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:gap-x-6 min-w-0 lg:grid-cols-3 !mt-2">
             {groupItemsByName(filteredItems).map(group => (
               <ItemCard
                 key={group.name}
                 item={group.items[0]}
                 items={group.items}
                 count={group.count}
+                locations={itemLocationLabels(group.items, containers)}
                 selected={group.items.every(i => selectedItemIds.has(i.id))}
                 onToggleSelect={selectMode ? () => toggleSelectGroup(group.items) : undefined}
                 onOpenItem={selectMode ? undefined : () => setDetailGroup(group)}
@@ -895,6 +890,11 @@ function RoomContent({ roomId }) {
         </>
       )}
 
+      <footer className="border-t border-surface-800 pt-4 text-sm text-surface-400">
+        {room.description && <p className="mb-2">{room.description}</p>}
+        <p>Photos become suggestions. You choose what to save.</p>
+      </footer>
+
       {/* Item-move picker (multi-select or single) */}
       {movingItems && (
         <MovePicker
@@ -912,6 +912,7 @@ function RoomContent({ roomId }) {
           item={detailGroup.items[0]}
           items={detailGroup.items}
           count={detailGroup.count}
+          locations={itemLocationLabels(detailGroup.items, containers).map(label => `${houseName} / ${room.name} / ${label}`)}
           onClose={() => setDetailGroup(null)}
           onMove={handleMoveSingleItem}
           onUpdate={(updates) =>

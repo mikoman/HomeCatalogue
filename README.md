@@ -58,15 +58,19 @@ See the [model research](docs/model-research.md) for model comparisons and sourc
 
 ## Interface
 
-The interface uses a dark background and a grid pattern.
-It uses yellow for actions and visible focus indicators for keyboard navigation.
+The Folio interface uses large item photos, serif headings, and visible storage locations.
+The header switch selects light or dark mode and remembers the choice in this browser.
+The first visit follows the system theme. Both themes include visible keyboard focus indicators.
 
 | Element | Value |
 |---|---|
-| Action colour | `#FFC700` |
-| Background colour | `#0A0A0B` |
-| Heading typeface | Space Grotesk |
-| Monospace typeface | Space Mono |
+| Light background | Ivory `#F5F2EB` |
+| Dark background | Deep green `#131E19` |
+| Light / dark action colour | Forest `#274B3E` / sage `#B8D3AF` |
+| Heading typeface | Lora |
+| Control and body typeface | Source Sans 3 |
+
+Both typefaces load from local files. Their licences are in `frontend/public/fonts`.
 
 The style configuration is in [tailwind.config.js](frontend/tailwind.config.js) and [index.css](frontend/src/index.css).
 

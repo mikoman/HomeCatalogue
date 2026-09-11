@@ -48,7 +48,7 @@ export default function App() {
         <Route path="/houses" element={<HouseList {...catalogue} />} />
         <Route path="/capture" element={<HouseList {...catalogue} captureMode />} />
         <Route path="/houses/:houseId" element={<HouseDetail onRefresh={refresh} />} />
-        <Route path="/rooms/:roomId" element={<RoomView />} />
+        <Route path="/rooms/:roomId" element={<RoomView houses={housesList} />} />
         <Route path="/review-scan" element={<ReviewScan />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/search" element={<SearchResults />} />

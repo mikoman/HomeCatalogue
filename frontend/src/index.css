@@ -1,157 +1,169 @@
+@font-face {
+  font-family: 'Lora';
+  src: url('/fonts/lora-latin-variable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Source Sans 3';
+  src: url('/fonts/source-sans-3-latin-variable.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  * {
-    -webkit-tap-highlight-color: transparent;
+  :root {
+    color-scheme: light;
+    --surface-50: 22 31 25;
+    --surface-100: 31 40 33;
+    --surface-200: 49 60 50;
+    --surface-300: 71 81 70;
+    --surface-400: 91 101 87;
+    --surface-500: 100 109 94;
+    --surface-600: 137 147 128;
+    --surface-700: 188 196 177;
+    --surface-800: 221 224 210;
+    --surface-900: 252 250 245;
+    --surface-950: 245 242 235;
+    --primary-50: 24 53 40;
+    --primary-100: 32 60 47;
+    --primary-200: 36 67 50;
+    --primary-300: 47 80 58;
+    --primary-400: 30 66 52;
+    --primary-500: 39 75 62;
+    --primary-600: 57 91 69;
+    --primary-700: 106 131 106;
+    --primary-800: 187 205 180;
+    --primary-900: 226 234 218;
+    --error-text: 145 47 43;
+    --error-border: 190 128 117;
+    --error-surface: 240 205 193;
+    --success-text: 36 91 54;
+    --success-border: 113 151 110;
+    --success-surface: 192 217 182;
+    --sidebar: 35 68 54;
+    --sidebar-text: 246 244 234;
+    --sidebar-muted: 205 218 202;
+    --sidebar-line: 95 121 100;
+    --sidebar-selected: 74 103 80;
   }
-
-  html {
-    overflow-x: hidden;
+  :root.dark {
     color-scheme: dark;
+    --surface-50: 250 248 238;
+    --surface-100: 243 241 231;
+    --surface-200: 226 230 219;
+    --surface-300: 207 213 199;
+    --surface-400: 176 189 175;
+    --surface-500: 164 180 166;
+    --surface-600: 105 131 113;
+    --surface-700: 65 86 71;
+    --surface-800: 43 59 49;
+    --surface-900: 27 40 33;
+    --surface-950: 19 30 25;
+    --primary-50: 236 247 224;
+    --primary-100: 228 241 216;
+    --primary-200: 215 232 202;
+    --primary-300: 201 223 192;
+    --primary-400: 206 226 196;
+    --primary-500: 184 211 175;
+    --primary-600: 155 188 143;
+    --primary-700: 91 135 98;
+    --primary-800: 61 92 66;
+    --primary-900: 35 59 42;
+    --error-text: 244 169 150;
+    --error-border: 131 76 65;
+    --error-surface: 84 39 34;
+    --success-text: 187 221 164;
+    --success-border: 87 130 78;
+    --success-surface: 38 67 40;
+    --sidebar: 15 37 27;
+    --sidebar-selected: 47 78 56;
+    --sidebar-line: 67 94 73;
   }
-
-  body {
-    @apply bg-surface-950 text-surface-300;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    min-height: 100dvh;
-    overflow-x: hidden;
-    /* Faint graph-paper grid — the "manifest paper" beneath everything */
-    background-color: #0A0A0B;
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-    background-size: 34px 34px;
-  }
-
-  h1, h2, h3 {
-    font-family: 'Space Grotesk', Inter, system-ui, sans-serif;
-    text-wrap: balance;
-  }
-
-  ::selection { background: #FFC700; color: #0A0A0B; }
-  input, textarea { caret-color: #FFC700; }
+  * { -webkit-tap-highlight-color: transparent; }
+  html { overflow-x: hidden; }
+  body { @apply bg-surface-950 text-surface-300 font-sans; min-height: 100dvh; overflow-x: hidden; }
+  h1, h2, h3 { @apply font-display; text-wrap: balance; }
+  h1 { letter-spacing: -0.035em; }
+  ::selection { background: rgb(var(--primary-500)); color: rgb(var(--surface-950)); }
+  input, textarea { caret-color: rgb(var(--primary-500)); }
   a { text-underline-offset: 3px; }
   button:disabled { cursor: not-allowed; opacity: 0.55; }
-
-  /* Keyboard focus — visible everywhere, never trapped behind outline:none */
-  :focus-visible {
-    outline: 2px solid theme('colors.primary.500');
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
-
-  /* Custom scrollbar */
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { @apply bg-surface-950; }
-  ::-webkit-scrollbar-thumb { @apply bg-surface-700 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-600; }
+  :focus-visible { outline: 2px solid rgb(var(--primary-500)); outline-offset: 3px; border-radius: 3px; }
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--surface-700)) rgb(var(--surface-950)); }
 }
 
 @layer components {
   .btn-primary {
-    @apply min-h-11 px-4 py-2.5 bg-primary-500 hover:bg-primary-400 text-surface-950 font-semibold
-           rounded-md transition-all duration-150 active:scale-[0.98]
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary-500
-           flex items-center justify-center gap-2 shadow-sm hover:shadow-glow;
+    @apply min-h-11 px-4 py-2.5 bg-primary-500 hover:bg-primary-400 text-surface-950 font-semibold rounded-md
+      transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
   }
-
   .btn-secondary {
-    @apply min-h-11 px-4 py-2.5 bg-surface-900 hover:bg-surface-800 text-surface-200 font-medium
-           rounded-md transition-colors duration-150 active:scale-[0.98]
-           border border-surface-700 hover:border-surface-600
-           flex items-center justify-center gap-2;
+    @apply min-h-11 px-4 py-2.5 bg-surface-900 hover:bg-surface-800 text-surface-200 font-medium rounded-md
+      transition-colors duration-150 border border-surface-700 flex items-center justify-center gap-2;
   }
-
   .btn-danger {
-    @apply px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-medium
-           rounded-md transition-colors duration-150 active:scale-[0.98]
-           flex items-center justify-center gap-2;
+    @apply min-h-11 px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded-md
+      transition-colors duration-150 flex items-center justify-center gap-2;
   }
-
   .input-field {
-    @apply min-h-11 w-full px-3.5 py-2.5 bg-surface-950 border border-surface-700
-           rounded-md text-surface-100 placeholder-surface-500 font-sans
-           focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500
-           transition-all duration-150;
+    @apply min-h-11 w-full px-3.5 py-2.5 bg-surface-900 border border-surface-700 rounded-md text-surface-100
+      placeholder-surface-500 font-sans focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors duration-150;
   }
-
-  .card {
-    @apply bg-surface-900 border border-surface-800 rounded-lg p-4 min-w-0 max-w-full;
-  }
-
-  .icon-button { @apply min-w-11 min-h-11 inline-flex items-center justify-center rounded-lg hover:bg-surface-800 transition-colors; }
+  .card { @apply bg-surface-900 border border-surface-800 rounded-lg p-4 min-w-0 max-w-full; }
+  .icon-button { @apply min-w-11 min-h-11 inline-flex items-center justify-center rounded-md hover:bg-surface-800 transition-colors; }
   .field-label { @apply block text-sm font-medium text-surface-300 mb-2; }
   .skip-link { @apply sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-primary-500 focus:text-surface-950 focus:px-4 focus:py-3; }
+  .eyebrow { @apply font-sans text-sm font-semibold text-surface-300; }
+  .code { @apply font-mono text-surface-500; }
+  .tag { @apply inline-flex items-center text-xs px-2 py-1 rounded bg-surface-800 text-surface-300; }
+  .badge { @apply inline-flex items-center text-xs px-2 py-1 rounded; }
+  .badge-high, .badge-medium { @apply badge bg-primary-900/40 text-primary-400; }
+  .badge-low { @apply badge bg-red-950/60 text-red-400; }
 
-  /* Mono "data layer" — counts, IDs, categories, labels: the printed-manifest voice */
-  .eyebrow {
-    @apply font-mono text-[0.68rem] uppercase tracking-[0.22em] text-primary-500;
-  }
+  .folio-sidebar { background: rgb(var(--sidebar)); color: rgb(var(--sidebar-text)); border-color: rgb(var(--sidebar-line)); color-scheme: dark; }
+  .folio-sidebar :focus-visible { outline-color: rgb(var(--sidebar-text)); }
+  .folio-nav-item { @apply flex items-center gap-3 px-3 py-3 rounded-md text-base transition-colors; color: rgb(var(--sidebar-text)); }
+  .folio-nav-item:hover, .folio-nav-item[aria-current='page'] { background: rgb(var(--sidebar-selected)); }
+  .folio-nav-muted { color: rgb(var(--sidebar-muted)); }
+  .folio-nav-divider { border-color: rgb(var(--sidebar-line)); }
+  .folio-mark { @apply grid grid-cols-2 gap-1 shrink-0 w-6 h-6; }
+  .folio-mark span { background: currentColor; border-radius: 2px; }
 
-  .code {
-    @apply font-mono text-surface-500;
-  }
-
-  .tag {
-    @apply inline-flex items-center font-mono text-[0.62rem] uppercase tracking-wider
-           px-1.5 py-0.5 rounded-sm bg-surface-800 text-surface-300 border border-surface-700;
-  }
-
-  .badge {
-    @apply inline-flex items-center font-mono text-[0.62rem] uppercase tracking-wider
-           px-1.5 py-0.5 rounded-sm;
-  }
-
-  .badge-high   { @apply badge bg-primary-900/40 text-primary-400 border border-primary-900; }
-  .badge-medium { @apply badge bg-primary-900/40 text-primary-400 border border-primary-900/80; }
-  .badge-low    { @apply badge bg-red-950/60 text-red-400 border border-red-900/60; }
-
-  /* Signature: hazard tape. Static accent + animated scanner band. */
-  .hazard {
-    background-image: repeating-linear-gradient(
-      45deg,
-      theme('colors.surface.950') 0 9px,
-      theme('colors.primary.500') 9px 18px
-    );
-  }
-
-  .scan-stripes {
-    background-image: repeating-linear-gradient(
-      45deg,
-      theme('colors.primary.500') 0 10px,
-      theme('colors.surface.950') 10px 20px
-    );
-    background-size: 28.28px 28.28px; /* 20px * √2 — exact diagonal tile for a seamless loop */
-    animation: scan-move 0.7s linear infinite;
-  }
-
-  @keyframes scan-move {
-    to { background-position: 28.28px 0; }
-  }
+  .theme-toggle { @apply min-h-11 flex shrink-0 items-center justify-center gap-2 rounded-md px-2 text-sm text-surface-300 hover:bg-surface-800; }
+  .theme-toggle-track { @apply relative block w-9 h-5 rounded-full bg-surface-700; }
+  .theme-toggle-track > span { @apply absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-surface-900; transition: transform 150ms ease-out; }
+  .theme-toggle[aria-checked='true'] .theme-toggle-track { @apply bg-primary-500; }
+  .theme-toggle[aria-checked='true'] .theme-toggle-track > span { transform: translateX(1rem); }
+  .folio-tab { @apply min-h-11 px-3 py-2 text-sm text-surface-400 border-b-2 border-transparent whitespace-nowrap hover:text-primary-400; }
+  .folio-tab[aria-pressed='true'] { @apply text-primary-400 border-primary-500 font-semibold; }
+  .folio-item { @apply min-w-0; }
+  .folio-item-image { @apply w-full aspect-[4/3] lg:aspect-video bg-surface-900 overflow-hidden rounded-sm; }
+  .folio-item-placeholder { @apply w-full h-full flex flex-col items-center justify-center gap-3 text-surface-500; }
+  .folio-item-title { @apply font-display text-lg font-medium leading-snug text-surface-100; }
+  .folio-item[data-selected='true'] .folio-item-image { outline: 2px solid rgb(var(--primary-500)); outline-offset: 3px; }
+  .folio-review-item { @apply border-b border-surface-800 py-2; }
+  .folio-review-item .input-field { @apply bg-surface-950; }
+  .scan-stripes { @apply bg-primary-500; animation: scan-breathe 1.4s ease-in-out infinite; }
+  @keyframes scan-breathe { 50% { opacity: 0.4; } }
 }
-
 @media (max-width: 640px) {
   input, textarea, select { font-size: 16px !important; }
 }
-
 @media (pointer: coarse) {
   button[aria-label], a[aria-label] { min-width: 44px; min-height: 44px; }
   .group > .opacity-0, .group\/house > .opacity-0 { opacity: 1; }
 }
-
-/* Safe-area padding for notched mobile */
 @supports (padding: max(0px)) {
   .safe-top { padding-top: max(env(safe-area-inset-top), 0px); }
   .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-  }
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
   .scan-stripes { animation: none; }
 }

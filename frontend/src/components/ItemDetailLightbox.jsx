@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { cropStyle } from '../utils/cropStyle';
 
 export default function ItemDetailLightbox({
-  item, items, count = 1, onClose, onUpdate, onDelete, onMove, onPromote,
+  item, items, count = 1, onClose, onUpdate, onDelete, onMove, onPromote, locations = [],
 }) {
   const groupItems = items ?? [item];
   const [mode, setMode] = useState(null);
@@ -138,6 +138,7 @@ export default function ItemDetailLightbox({
           ) : (
             <>
               {item.category && <p className="text-surface-300 break-words">{item.category}</p>}
+              {locations.length > 0 && <div className="space-y-1"><p className="text-sm font-semibold text-surface-200">Location</p>{locations.map(location => <p key={location} className="text-sm text-surface-400 break-words">{location}</p>)}</div>}
               {item.tags?.length > 0 && <p className="text-sm text-surface-400 break-words">{item.tags.join(' · ')}</p>}
               {item.confidence_score != null && item.confidence_score < 0.7 && <p className="text-sm text-primary-400">The AI was uncertain. Check the name and category.</p>}
               {item.notes && <p className="text-surface-300 whitespace-pre-wrap break-words">{item.notes}</p>}

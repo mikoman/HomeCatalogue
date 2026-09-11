@@ -31,13 +31,13 @@ export default function SearchBar() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search the catalogue…"
-        className="input-field pl-9 pr-20 text-base w-full min-h-11"
+        className="input-field pl-9 pr-20 text-sm w-full min-h-11"
         enterKeyHint="search"
       />
       <button
         type="submit"
         disabled={!query.trim()}
-        className="absolute right-1 top-1 bottom-1 px-3 text-sm font-medium text-primary-400 disabled:text-surface-400 disabled:cursor-not-allowed"
+        className="absolute right-0 top-0 bottom-0 min-h-11 px-3 text-sm font-medium text-primary-400 disabled:text-surface-400 disabled:cursor-not-allowed"
       >
         Search
       </button>

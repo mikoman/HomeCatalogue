@@ -51,7 +51,7 @@ export default function Settings() {
     </header>
     <div className="flex flex-wrap justify-between gap-3 border-y border-surface-800 py-4">
       <div className="min-w-0"><p className="text-xs text-surface-400 mb-1">New scans use</p><p className="text-sm text-surface-100 break-words"><strong>{active.label}</strong><span className="text-surface-400"> · {settings.effective_model || 'No model selected'}</span></p></div>
-      <div className="text-sm text-surface-400 sm:text-right"><p>{settings.running_in_docker ? 'Backend in Docker' : 'Backend runs directly'}</p><p className={`text-xs mt-1 ${needsKey ? 'text-amber-300' : 'text-surface-400'}`}>{needsKey ? 'An API key is required' : settings.box_source === 'off' ? 'Bounding boxes off' : settings.box_source === 'vlm' ? 'Boxes from the vision model' : 'Boxes from the object detector'}</p></div>
+      <div className="text-sm text-surface-400 sm:text-right"><p>{settings.running_in_docker ? 'Backend in Docker' : 'Backend runs directly'}</p><p className={`text-xs mt-1 ${needsKey ? 'text-red-400' : 'text-surface-400'}`}>{needsKey ? 'An API key is required' : settings.box_source === 'off' ? 'Bounding boxes off' : settings.box_source === 'vlm' ? 'Boxes from the vision model' : 'Boxes from the object detector'}</p></div>
     </div>
     <nav aria-label="Settings sections" className="flex flex-wrap gap-2 border-b border-surface-800 pb-3">
       {SECTIONS.map(entry => <button type="button" key={entry.id} aria-pressed={section === entry.id} aria-controls={`settings-${entry.id}`} onClick={() => setSection(entry.id)}

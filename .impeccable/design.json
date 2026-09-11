@@ -1,338 +1,761 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-11T14:49:08.642053+00:00",
+  "generatedAt": "2026-09-11T15:44:27.309805+00:00",
   "title": "Design System: Home Catalogue",
   "extensions": {
     "colorMeta": {
       "primary-300": {
+        "displayName": "Forest and sage 300",
         "role": "primary",
-        "displayName": "Safety yellow-300",
         "tonalRamp": [
-          "#3D2D00",
-          "#6B4F00",
-          "#A37800",
-          "#E0A800",
-          "#FFC700",
-          "#FFD11F",
-          "#FFEA85",
-          "#FFFCEB"
+          "oklch(15% 0.0540 154.1)",
+          "oklch(26% 0.0540 154.1)",
+          "oklch(38% 0.0540 154.1)",
+          "oklch(49% 0.0540 154.1)",
+          "oklch(61% 0.0540 154.1)",
+          "oklch(72% 0.0540 154.1)",
+          "oklch(84% 0.0540 154.1)",
+          "oklch(95% 0.0540 154.1)"
         ]
       },
       "primary-400": {
+        "displayName": "Forest and sage 400",
         "role": "primary",
-        "displayName": "Safety yellow-400",
         "tonalRamp": [
-          "#3D2D00",
-          "#6B4F00",
-          "#A37800",
-          "#E0A800",
-          "#FFC700",
-          "#FFD11F",
-          "#FFEA85",
-          "#FFFCEB"
+          "oklch(15% 0.0489 166.1)",
+          "oklch(26% 0.0489 166.1)",
+          "oklch(38% 0.0489 166.1)",
+          "oklch(49% 0.0489 166.1)",
+          "oklch(61% 0.0489 166.1)",
+          "oklch(72% 0.0489 166.1)",
+          "oklch(84% 0.0489 166.1)",
+          "oklch(95% 0.0489 166.1)"
         ]
       },
       "primary-500": {
+        "displayName": "Forest and sage 500",
         "role": "primary",
-        "displayName": "Safety yellow-500",
         "tonalRamp": [
-          "#3D2D00",
-          "#6B4F00",
-          "#A37800",
-          "#E0A800",
-          "#FFC700",
-          "#FFD11F",
-          "#FFEA85",
-          "#FFFCEB"
+          "oklch(15% 0.0477 168.4)",
+          "oklch(26% 0.0477 168.4)",
+          "oklch(38% 0.0477 168.4)",
+          "oklch(49% 0.0477 168.4)",
+          "oklch(61% 0.0477 168.4)",
+          "oklch(72% 0.0477 168.4)",
+          "oklch(84% 0.0477 168.4)",
+          "oklch(95% 0.0477 168.4)"
+        ]
+      },
+      "primary-900": {
+        "displayName": "Forest and sage 900",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0230 128.7)",
+          "oklch(26% 0.0230 128.7)",
+          "oklch(38% 0.0230 128.7)",
+          "oklch(49% 0.0230 128.7)",
+          "oklch(61% 0.0230 128.7)",
+          "oklch(72% 0.0230 128.7)",
+          "oklch(84% 0.0230 128.7)",
+          "oklch(95% 0.0230 128.7)"
         ]
       },
       "surface-100": {
+        "displayName": "Paper and ink 100",
         "role": "neutral",
-        "displayName": "Charcoal-100",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-200": {
+        "displayName": "Paper and ink 200",
         "role": "neutral",
-        "displayName": "Charcoal-200",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-300": {
+        "displayName": "Paper and ink 300",
         "role": "neutral",
-        "displayName": "Charcoal-300",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-400": {
+        "displayName": "Paper and ink 400",
         "role": "neutral",
-        "displayName": "Charcoal-400",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-500": {
+        "displayName": "Paper and ink 500",
         "role": "neutral",
-        "displayName": "Charcoal-500",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
-        ]
-      },
-      "surface-600": {
-        "role": "neutral",
-        "displayName": "Charcoal-600",
-        "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-700": {
+        "displayName": "Paper and ink 700",
         "role": "neutral",
-        "displayName": "Charcoal-700",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-800": {
+        "displayName": "Paper and ink 800",
         "role": "neutral",
-        "displayName": "Charcoal-800",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-900": {
+        "displayName": "Paper and ink 900",
         "role": "neutral",
-        "displayName": "Charcoal-900",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "surface-950": {
+        "displayName": "Paper and ink 950",
         "role": "neutral",
-        "displayName": "Charcoal-950",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
-        ]
-      },
-      "danger": {
-        "displayName": "Danger",
-        "tonalRamp": [
-          "#450a0a",
-          "#7f1d1d",
-          "#991b1b",
-          "#b91c1c",
-          "#dc2626",
-          "#ef4444",
-          "#fca5a5",
-          "#fef2f2"
-        ]
-      },
-      "danger-hover": {
-        "displayName": "Danger hover",
-        "tonalRamp": [
-          "#450a0a",
-          "#7f1d1d",
-          "#991b1b",
-          "#b91c1c",
-          "#dc2626",
-          "#ef4444",
-          "#fca5a5",
-          "#fef2f2"
+          "rgb(22 31 25)",
+          "rgb(49 60 50)",
+          "rgb(71 81 70)",
+          "rgb(91 101 87)",
+          "rgb(188 196 177)",
+          "rgb(221 224 210)",
+          "rgb(245 242 235)",
+          "rgb(252 250 245)"
         ]
       },
       "error-text": {
         "displayName": "Error text",
+        "role": "status",
         "tonalRamp": [
-          "#450a0a",
-          "#7f1d1d",
-          "#991b1b",
-          "#b91c1c",
-          "#dc2626",
-          "#ef4444",
-          "#fca5a5",
-          "#fef2f2"
+          "oklch(15% 0.1331 26.3)",
+          "oklch(26% 0.1331 26.3)",
+          "oklch(38% 0.1331 26.3)",
+          "oklch(49% 0.1331 26.3)",
+          "oklch(61% 0.1331 26.3)",
+          "oklch(72% 0.1331 26.3)",
+          "oklch(84% 0.1331 26.3)",
+          "oklch(95% 0.1331 26.3)"
         ]
       },
       "error-border": {
         "displayName": "Error border",
+        "role": "status",
         "tonalRamp": [
-          "#450a0a",
-          "#7f1d1d",
-          "#991b1b",
-          "#b91c1c",
-          "#dc2626",
-          "#ef4444",
-          "#fca5a5",
-          "#fef2f2"
+          "oklch(15% 0.0794 30.4)",
+          "oklch(26% 0.0794 30.4)",
+          "oklch(38% 0.0794 30.4)",
+          "oklch(49% 0.0794 30.4)",
+          "oklch(61% 0.0794 30.4)",
+          "oklch(72% 0.0794 30.4)",
+          "oklch(84% 0.0794 30.4)",
+          "oklch(95% 0.0794 30.4)"
         ]
       },
-      "error-background": {
-        "displayName": "Error background",
+      "error-surface": {
+        "displayName": "Error paper and ink",
+        "role": "status",
         "tonalRamp": [
-          "#450a0a",
-          "#7f1d1d",
-          "#991b1b",
-          "#b91c1c",
-          "#dc2626",
-          "#ef4444",
-          "#fca5a5",
-          "#fef2f2"
+          "oklch(15% 0.0430 39.8)",
+          "oklch(26% 0.0430 39.8)",
+          "oklch(38% 0.0430 39.8)",
+          "oklch(49% 0.0430 39.8)",
+          "oklch(61% 0.0430 39.8)",
+          "oklch(72% 0.0430 39.8)",
+          "oklch(84% 0.0430 39.8)",
+          "oklch(95% 0.0430 39.8)"
         ]
       },
       "success-text": {
         "displayName": "Success text",
+        "role": "status",
         "tonalRamp": [
-          "#052e16",
-          "#14532d",
-          "#166534",
-          "#15803d",
-          "#16a34a",
-          "#22c55e",
-          "#86efac",
-          "#f0fdf4"
+          "oklch(15% 0.0847 151.8)",
+          "oklch(26% 0.0847 151.8)",
+          "oklch(38% 0.0847 151.8)",
+          "oklch(49% 0.0847 151.8)",
+          "oklch(61% 0.0847 151.8)",
+          "oklch(72% 0.0847 151.8)",
+          "oklch(84% 0.0847 151.8)",
+          "oklch(95% 0.0847 151.8)"
         ]
       },
       "success-border": {
         "displayName": "Success border",
+        "role": "status",
         "tonalRamp": [
-          "#052e16",
-          "#14532d",
-          "#166534",
-          "#15803d",
-          "#16a34a",
-          "#22c55e",
-          "#86efac",
-          "#f0fdf4"
+          "oklch(15% 0.0735 142.8)",
+          "oklch(26% 0.0735 142.8)",
+          "oklch(38% 0.0735 142.8)",
+          "oklch(49% 0.0735 142.8)",
+          "oklch(61% 0.0735 142.8)",
+          "oklch(72% 0.0735 142.8)",
+          "oklch(84% 0.0735 142.8)",
+          "oklch(95% 0.0735 142.8)"
         ]
       },
-      "success-background": {
-        "displayName": "Success background",
+      "success-surface": {
+        "displayName": "Success paper and ink",
+        "role": "status",
         "tonalRamp": [
-          "#052e16",
-          "#14532d",
-          "#166534",
-          "#15803d",
-          "#16a34a",
-          "#22c55e",
-          "#86efac",
-          "#f0fdf4"
+          "oklch(15% 0.0545 136.7)",
+          "oklch(26% 0.0545 136.7)",
+          "oklch(38% 0.0545 136.7)",
+          "oklch(49% 0.0545 136.7)",
+          "oklch(61% 0.0545 136.7)",
+          "oklch(72% 0.0545 136.7)",
+          "oklch(84% 0.0545 136.7)",
+          "oklch(95% 0.0545 136.7)"
+        ]
+      },
+      "sidebar": {
+        "displayName": "Sidebar",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0464 164.7)",
+          "oklch(26% 0.0464 164.7)",
+          "oklch(38% 0.0464 164.7)",
+          "oklch(49% 0.0464 164.7)",
+          "oklch(61% 0.0464 164.7)",
+          "oklch(72% 0.0464 164.7)",
+          "oklch(84% 0.0464 164.7)",
+          "oklch(95% 0.0464 164.7)"
+        ]
+      },
+      "sidebar-text": {
+        "displayName": "Sidebar text",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0134 97.4)",
+          "oklch(26% 0.0134 97.4)",
+          "oklch(38% 0.0134 97.4)",
+          "oklch(49% 0.0134 97.4)",
+          "oklch(61% 0.0134 97.4)",
+          "oklch(72% 0.0134 97.4)",
+          "oklch(84% 0.0134 97.4)",
+          "oklch(95% 0.0134 97.4)"
+        ]
+      },
+      "sidebar-muted": {
+        "displayName": "Sidebar muted",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0258 139.8)",
+          "oklch(26% 0.0258 139.8)",
+          "oklch(38% 0.0258 139.8)",
+          "oklch(49% 0.0258 139.8)",
+          "oklch(61% 0.0258 139.8)",
+          "oklch(72% 0.0258 139.8)",
+          "oklch(84% 0.0258 139.8)",
+          "oklch(95% 0.0258 139.8)"
+        ]
+      },
+      "sidebar-line": {
+        "displayName": "Sidebar line",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0443 150.5)",
+          "oklch(26% 0.0443 150.5)",
+          "oklch(38% 0.0443 150.5)",
+          "oklch(49% 0.0443 150.5)",
+          "oklch(61% 0.0443 150.5)",
+          "oklch(72% 0.0443 150.5)",
+          "oklch(84% 0.0443 150.5)",
+          "oklch(95% 0.0443 150.5)"
+        ]
+      },
+      "sidebar-selected": {
+        "displayName": "Sidebar selected",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0501 150.5)",
+          "oklch(26% 0.0501 150.5)",
+          "oklch(38% 0.0501 150.5)",
+          "oklch(49% 0.0501 150.5)",
+          "oklch(61% 0.0501 150.5)",
+          "oklch(72% 0.0501 150.5)",
+          "oklch(84% 0.0501 150.5)",
+          "oklch(95% 0.0501 150.5)"
+        ]
+      },
+      "primary-300-dark": {
+        "displayName": "Forest and sage 300 · dark",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0480 136.5)",
+          "oklch(26% 0.0480 136.5)",
+          "oklch(38% 0.0480 136.5)",
+          "oklch(49% 0.0480 136.5)",
+          "oklch(61% 0.0480 136.5)",
+          "oklch(72% 0.0480 136.5)",
+          "oklch(84% 0.0480 136.5)",
+          "oklch(95% 0.0480 136.5)"
+        ]
+      },
+      "primary-400-dark": {
+        "displayName": "Forest and sage 400 · dark",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0456 135.1)",
+          "oklch(26% 0.0456 135.1)",
+          "oklch(38% 0.0456 135.1)",
+          "oklch(49% 0.0456 135.1)",
+          "oklch(61% 0.0456 135.1)",
+          "oklch(72% 0.0456 135.1)",
+          "oklch(84% 0.0456 135.1)",
+          "oklch(95% 0.0456 135.1)"
+        ]
+      },
+      "primary-500-dark": {
+        "displayName": "Forest and sage 500 · dark",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0571 137.9)",
+          "oklch(26% 0.0571 137.9)",
+          "oklch(38% 0.0571 137.9)",
+          "oklch(49% 0.0571 137.9)",
+          "oklch(61% 0.0571 137.9)",
+          "oklch(72% 0.0571 137.9)",
+          "oklch(84% 0.0571 137.9)",
+          "oklch(95% 0.0571 137.9)"
+        ]
+      },
+      "primary-900-dark": {
+        "displayName": "Forest and sage 900 · dark",
+        "role": "primary",
+        "tonalRamp": [
+          "oklch(15% 0.0426 152.8)",
+          "oklch(26% 0.0426 152.8)",
+          "oklch(38% 0.0426 152.8)",
+          "oklch(49% 0.0426 152.8)",
+          "oklch(61% 0.0426 152.8)",
+          "oklch(72% 0.0426 152.8)",
+          "oklch(84% 0.0426 152.8)",
+          "oklch(95% 0.0426 152.8)"
+        ]
+      },
+      "surface-100-dark": {
+        "displayName": "Paper and ink 100 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-200-dark": {
+        "displayName": "Paper and ink 200 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-300-dark": {
+        "displayName": "Paper and ink 300 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-400-dark": {
+        "displayName": "Paper and ink 400 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-500-dark": {
+        "displayName": "Paper and ink 500 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-700-dark": {
+        "displayName": "Paper and ink 700 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-800-dark": {
+        "displayName": "Paper and ink 800 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-900-dark": {
+        "displayName": "Paper and ink 900 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "surface-950-dark": {
+        "displayName": "Paper and ink 950 · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "rgb(19 30 25)",
+          "rgb(27 40 33)",
+          "rgb(43 59 49)",
+          "rgb(65 86 71)",
+          "rgb(105 131 113)",
+          "rgb(176 189 175)",
+          "rgb(226 230 219)",
+          "rgb(250 248 238)"
+        ]
+      },
+      "error-text-dark": {
+        "displayName": "Error text · dark",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.0932 34.8)",
+          "oklch(26% 0.0932 34.8)",
+          "oklch(38% 0.0932 34.8)",
+          "oklch(49% 0.0932 34.8)",
+          "oklch(61% 0.0932 34.8)",
+          "oklch(72% 0.0932 34.8)",
+          "oklch(84% 0.0932 34.8)",
+          "oklch(95% 0.0932 34.8)"
+        ]
+      },
+      "error-border-dark": {
+        "displayName": "Error border · dark",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.0773 32.2)",
+          "oklch(26% 0.0773 32.2)",
+          "oklch(38% 0.0773 32.2)",
+          "oklch(49% 0.0773 32.2)",
+          "oklch(61% 0.0773 32.2)",
+          "oklch(72% 0.0773 32.2)",
+          "oklch(84% 0.0773 32.2)",
+          "oklch(95% 0.0773 32.2)"
+        ]
+      },
+      "error-surface-dark": {
+        "displayName": "Error paper and ink · dark",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.0681 27.8)",
+          "oklch(26% 0.0681 27.8)",
+          "oklch(38% 0.0681 27.8)",
+          "oklch(49% 0.0681 27.8)",
+          "oklch(61% 0.0681 27.8)",
+          "oklch(72% 0.0681 27.8)",
+          "oklch(84% 0.0681 27.8)",
+          "oklch(95% 0.0681 27.8)"
+        ]
+      },
+      "success-text-dark": {
+        "displayName": "Success text · dark",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.0846 133.0)",
+          "oklch(26% 0.0846 133.0)",
+          "oklch(38% 0.0846 133.0)",
+          "oklch(49% 0.0846 133.0)",
+          "oklch(61% 0.0846 133.0)",
+          "oklch(72% 0.0846 133.0)",
+          "oklch(84% 0.0846 133.0)",
+          "oklch(95% 0.0846 133.0)"
+        ]
+      },
+      "success-border-dark": {
+        "displayName": "Success border · dark",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.0910 140.2)",
+          "oklch(26% 0.0910 140.2)",
+          "oklch(38% 0.0910 140.2)",
+          "oklch(49% 0.0910 140.2)",
+          "oklch(61% 0.0910 140.2)",
+          "oklch(72% 0.0910 140.2)",
+          "oklch(84% 0.0910 140.2)",
+          "oklch(95% 0.0910 140.2)"
+        ]
+      },
+      "success-surface-dark": {
+        "displayName": "Success paper and ink · dark",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.0580 145.8)",
+          "oklch(26% 0.0580 145.8)",
+          "oklch(38% 0.0580 145.8)",
+          "oklch(49% 0.0580 145.8)",
+          "oklch(61% 0.0580 145.8)",
+          "oklch(72% 0.0580 145.8)",
+          "oklch(84% 0.0580 145.8)",
+          "oklch(95% 0.0580 145.8)"
+        ]
+      },
+      "sidebar-dark": {
+        "displayName": "Sidebar · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0344 162.7)",
+          "oklch(26% 0.0344 162.7)",
+          "oklch(38% 0.0344 162.7)",
+          "oklch(49% 0.0344 162.7)",
+          "oklch(61% 0.0344 162.7)",
+          "oklch(72% 0.0344 162.7)",
+          "oklch(84% 0.0344 162.7)",
+          "oklch(95% 0.0344 162.7)"
+        ]
+      },
+      "sidebar-line-dark": {
+        "displayName": "Sidebar line · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0469 151.0)",
+          "oklch(26% 0.0469 151.0)",
+          "oklch(38% 0.0469 151.0)",
+          "oklch(49% 0.0469 151.0)",
+          "oklch(61% 0.0469 151.0)",
+          "oklch(72% 0.0469 151.0)",
+          "oklch(84% 0.0469 151.0)",
+          "oklch(95% 0.0469 151.0)"
+        ]
+      },
+      "sidebar-selected-dark": {
+        "displayName": "Sidebar selected · dark",
+        "role": "neutral",
+        "tonalRamp": [
+          "oklch(15% 0.0526 152.6)",
+          "oklch(26% 0.0526 152.6)",
+          "oklch(38% 0.0526 152.6)",
+          "oklch(49% 0.0526 152.6)",
+          "oklch(61% 0.0526 152.6)",
+          "oklch(72% 0.0526 152.6)",
+          "oklch(84% 0.0526 152.6)",
+          "oklch(95% 0.0526 152.6)"
+        ]
+      },
+      "danger": {
+        "displayName": "Danger",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.1331 26.3)",
+          "oklch(26% 0.1331 26.3)",
+          "oklch(38% 0.1331 26.3)",
+          "oklch(49% 0.1331 26.3)",
+          "oklch(61% 0.1331 26.3)",
+          "oklch(72% 0.1331 26.3)",
+          "oklch(84% 0.1331 26.3)",
+          "oklch(95% 0.1331 26.3)"
+        ]
+      },
+      "danger-hover": {
+        "displayName": "Danger hover",
+        "role": "status",
+        "tonalRamp": [
+          "oklch(15% 0.1423 26.2)",
+          "oklch(26% 0.1423 26.2)",
+          "oklch(38% 0.1423 26.2)",
+          "oklch(49% 0.1423 26.2)",
+          "oklch(61% 0.1423 26.2)",
+          "oklch(72% 0.1423 26.2)",
+          "oklch(84% 0.1423 26.2)",
+          "oklch(95% 0.1423 26.2)"
         ]
       },
       "white": {
-        "role": "neutral",
         "displayName": "White",
+        "role": "neutral",
         "tonalRamp": [
-          "#0A0A0B",
-          "#141416",
-          "#1E1E22",
-          "#2C2C31",
-          "#46464D",
-          "#9A9AA3",
-          "#E4E4E7",
-          "#FAFAFA"
+          "oklch(15% 0.0000 0.0)",
+          "oklch(26% 0.0000 0.0)",
+          "oklch(38% 0.0000 0.0)",
+          "oklch(49% 0.0000 0.0)",
+          "oklch(61% 0.0000 0.0)",
+          "oklch(72% 0.0000 0.0)",
+          "oklch(84% 0.0000 0.0)",
+          "oklch(95% 0.0000 0.0)"
         ]
       }
     },
-    "shadows": [
-      {
-        "name": "sm",
-        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-        "purpose": "The shared primary button shadow at rest."
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Room headings below 640px."
       },
-      {
-        "name": "glow",
-        "value": "0 0 0 1px rgba(255,199,0,0.4), 0 8px 30px -8px rgba(255,199,0,0.25)",
-        "purpose": "The shared primary button shadow on hover."
+      "display-wide": {
+        "displayName": "Display wide",
+        "purpose": "Room headings from 640px."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "The scan review heading."
+      },
+      "page-title": {
+        "displayName": "Page title",
+        "purpose": "Settings headings below 640px."
+      },
+      "item-title": {
+        "displayName": "Item title",
+        "purpose": "Names beneath gallery images."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "General text and editable names."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Controls and written locations."
+      },
+      "supporting": {
+        "displayName": "Supporting",
+        "purpose": "Compact counts and navigation labels."
       }
-    ],
+    },
+    "shadows": [],
     "motion": [
       {
         "name": "control-transition",
         "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
-        "purpose": "Shared button and field state transitions."
+        "purpose": "Shared button and field color changes."
       },
       {
-        "name": "button-press",
-        "value": "scale(0.98)",
-        "purpose": "Shared button press feedback."
+        "name": "theme-thumb",
+        "value": "transform 150ms ease-out",
+        "purpose": "Move the thumb between the two theme states."
+      },
+      {
+        "name": "scan-breathe",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Show scan progress with an opacity change."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.001ms",
+        "purpose": "Reduce transitions and stop the scan animation when requested."
       }
     ],
     "breakpoints": [
       {
         "name": "sm",
         "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
       },
       {
         "name": "lg",
@@ -345,82 +768,121 @@
       "name": "Primary button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "A Settings action using the shared button style.",
-      "html": "<button class=\"ds-button-primary\">Save and use provider</button>",
-      "css": ".ds-button-primary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:0;border-radius:6px;background:#FFC700;color:#0A0A0B;font: 600 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:all 150ms cubic-bezier(0.4,0,0.2,1);box-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);}.ds-button-primary:hover{background:#FFD11F;}.ds-button-primary:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}.ds-button-primary:active{transform:scale(0.98)}.ds-button-primary:disabled{opacity:0.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition-duration:0.001ms!important}}.ds-button-primary:hover{box-shadow:0 0 0 1px rgba(255,199,0,0.4),0 8px 30px -8px rgba(255,199,0,0.25)}.ds-button-primary:disabled{opacity:0.5}.ds-button-primary:disabled:hover{background:#FFC700}"
+      "description": "The main action on a page or review footer.",
+      "html": "<button type=\"button\" class=\"ds-button-primary\">Scan a space</button>",
+      "css": ".ds-button-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:0;border-radius:6px;background:rgb(var(--primary-500, 39 75 62));color:rgb(var(--surface-950, 245 242 235));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:16px;line-height:24px;font-weight:600;cursor:pointer;transition:color 150ms cubic-bezier(0.4,0,0.2,1),background-color 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-primary:hover{background:rgb(var(--primary-400, 30 66 52));}.ds-button-primary:focus-visible{outline:2px solid rgb(var(--primary-500, 39 75 62));outline-offset:3px;border-radius:3px;}.ds-button-primary:disabled{opacity:0.5;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){[class^=\"ds-\"]{transition-duration:0.001ms!important;animation:none!important}}"
     },
     {
       "name": "Secondary button",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "A Settings action using the shared button style.",
-      "html": "<button class=\"ds-button-secondary\">Test connection</button>",
-      "css": ".ds-button-secondary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid #2C2C31;border-radius:6px;background:#141416;color:#E4E4E7;font: 500 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:all 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-secondary:hover{background:#1E1E22;}.ds-button-secondary:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}.ds-button-secondary:active{transform:scale(0.98)}.ds-button-secondary:disabled{opacity:0.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition-duration:0.001ms!important}}.ds-button-secondary:hover{border-color:#46464D}"
+      "description": "An alternative action beside the main action.",
+      "html": "<button type=\"button\" class=\"ds-button-secondary\">Review later</button>",
+      "css": ".ds-button-secondary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid rgb(var(--surface-700, 188 196 177));border-radius:6px;background:rgb(var(--surface-900, 252 250 245));color:rgb(var(--surface-200, 49 60 50));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:16px;line-height:24px;font-weight:500;cursor:pointer;transition:color 150ms cubic-bezier(0.4,0,0.2,1),background-color 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-secondary:hover{background:rgb(var(--surface-800, 221 224 210));}.ds-button-secondary:focus-visible{outline:2px solid rgb(var(--primary-500, 39 75 62));outline-offset:3px;border-radius:3px;}.ds-button-secondary:disabled{opacity:0.5;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){[class^=\"ds-\"]{transition-duration:0.001ms!important;animation:none!important}}"
     },
     {
       "name": "Destructive button",
       "kind": "button",
       "refersTo": "button-danger",
-      "description": "A Settings action using the shared button style.",
-      "html": "<button class=\"ds-button-danger\">Delete everything</button>",
-      "css": ".ds-button-danger{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;border:0;border-radius:6px;background:#dc2626;color:#fff;font: 500 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:all 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-danger:hover{background:#ef4444;}.ds-button-danger:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}.ds-button-danger:active{transform:scale(0.98)}.ds-button-danger:disabled{opacity:0.55;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-button-danger{transition-duration:0.001ms!important}}"
+      "description": "A confirmed destructive action.",
+      "html": "<button type=\"button\" class=\"ds-button-danger\">Delete item</button>",
+      "css": ".ds-button-danger{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:0;border-radius:6px;background:#912f2b;color:#fff;font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:16px;line-height:24px;font-weight:500;cursor:pointer;transition:color 150ms cubic-bezier(0.4,0,0.2,1),background-color 150ms cubic-bezier(0.4,0,0.2,1);}.ds-button-danger:hover{background:#a63b36;}.ds-button-danger:focus-visible{outline:2px solid rgb(var(--primary-500, 39 75 62));outline-offset:3px;border-radius:3px;}.ds-button-danger:disabled{opacity:0.5;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){[class^=\"ds-\"]{transition-duration:0.001ms!important;animation:none!important}}"
     },
     {
       "name": "Text field",
       "kind": "input",
       "refersTo": "input",
-      "description": "A labelled field with help text and a yellow focus ring.",
-      "html": "<label class=\"ds-field-label\" for=\"ds-model\">Vision model</label><input class=\"ds-field\" id=\"ds-model\" placeholder=\"Enter a model ID\"><p class=\"ds-field-help\">Enter a model ID, or select an available model.</p>",
-      "css": ".ds-field-label{display:block;margin-bottom:8px;color:#C7C7CD;font:500 14px/20px Inter, system-ui, -apple-system, sans-serif}.ds-field{min-height:44px;width:100%;padding:10px 14px;background:#0A0A0B;border:1px solid #2C2C31;border-radius:6px;color:#F4F4F5;caret-color:#FFC700;font:400 14px/20px Inter, system-ui, -apple-system, sans-serif;transition:all 150ms cubic-bezier(0.4,0,0.2,1)}.ds-field::placeholder{color:#92929B}.ds-field:focus{outline:none;border-color:#FFC700;box-shadow:0 0 0 1px #FFC700}.ds-field-help{margin:8px 0 0;color:#9A9AA3;font:400 12px/16px Inter, system-ui, -apple-system, sans-serif}@media(max-width:640px){.ds-field{font-size:16px}}@media(prefers-reduced-motion:reduce){.ds-field{transition-duration:0.001ms!important}}"
+      "description": "A labelled field with a visible focus ring.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-item-name\">Name</label><input class=\"ds-input\" id=\"ds-item-name\" value=\"Coffee grinder\" />",
+      "css": ".ds-field-label{display:block;margin-bottom:8px;color:rgb(var(--surface-300, 71 81 70));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;font-weight:500;}.ds-input{width:100%;min-height:44px;padding:10px 14px;border:1px solid rgb(var(--surface-700, 188 196 177));border-radius:6px;background:rgb(var(--surface-900, 252 250 245));color:rgb(var(--surface-100, 31 40 33));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:16px;line-height:24px;transition:border-color 150ms cubic-bezier(0.4,0,0.2,1);}.ds-input:focus-visible{outline:none;border-color:rgb(var(--primary-500, 39 75 62));box-shadow:0 0 0 1px rgb(var(--primary-500, 39 75 62));}.ds-input:disabled{opacity:0.55;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){[class^=\"ds-\"]{transition-duration:0.001ms!important;animation:none!important}}"
     },
     {
-      "name": "Settings sections",
+      "name": "Sidebar navigation",
       "kind": "nav",
-      "refersTo": "section-selected",
-      "description": "Wrapping section buttons show the selected section.",
-      "html": "<nav class=\"ds-nav\" aria-label=\"Settings sections\"><button class=\"ds-nav-button\" aria-pressed=\"true\">Providers and models</button><button class=\"ds-nav-button\" aria-pressed=\"false\">Scans and boxes</button><button class=\"ds-nav-button\" aria-pressed=\"false\">Catalogue data</button></nav>",
-      "css": ".ds-nav{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:12px;border-bottom:1px solid #1E1E22}.ds-nav-button{min-height:44px;padding:8px 12px;border:0;border-radius:6px;background:transparent;color:#C7C7CD;font:500 14px/20px Inter, system-ui, -apple-system, sans-serif;cursor:pointer;transition:color 150ms,background-color 150ms}.ds-nav-button:hover{background:#1E1E22}.ds-nav-button[aria-pressed=\"true\"]{background:#FFC700;color:#0A0A0B}.ds-nav-button:focus-visible{outline:2px solid #FFC700;outline-offset:2px;border-radius:2px;}@media(prefers-reduced-motion:reduce){.ds-nav-button{transition-duration:0.001ms!important}}"
+      "refersTo": "sidebar-link",
+      "description": "Written navigation on the persistent forest surface.",
+      "html": "<nav class=\"ds-sidebar\" aria-label=\"Catalogue navigation\"><a class=\"ds-sidebar-link\" href=\"#catalogue\" aria-current=\"page\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\"/></svg>Catalogue</a></nav>",
+      "css": ".ds-sidebar{padding:12px;background:rgb(var(--sidebar, 35 68 54));}.ds-sidebar-link{display:flex;align-items:center;gap:12px;padding:12px;border-radius:6px;text-decoration:none;color:rgb(var(--sidebar-text, 246 244 234));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:16px;line-height:24px;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1);}.ds-sidebar-link:hover,.ds-sidebar-link[aria-current=\"page\"]{background:rgb(var(--sidebar-selected, 74 103 80));}.ds-sidebar-link:focus-visible{outline:2px solid rgb(var(--sidebar-text, 246 244 234));outline-offset:3px;}@media(prefers-reduced-motion:reduce){[class^=\"ds-\"]{transition-duration:0.001ms!important;animation:none!important}}"
     },
     {
-      "name": "Settings card",
+      "name": "Location filter",
+      "kind": "nav",
+      "refersTo": "location-tab",
+      "description": "A flat room filter with a selected underline.",
+      "html": "<div class=\"ds-tabs\" aria-label=\"Filter items\"><button type=\"button\" class=\"ds-tab\" aria-pressed=\"true\">All items</button><button type=\"button\" class=\"ds-tab\" aria-pressed=\"false\">Coffee shelf</button></div>",
+      "css": ".ds-tabs{display:flex;gap:8px;border-bottom:1px solid rgb(var(--surface-800, 221 224 210));}.ds-tab{min-height:44px;padding:8px 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:rgb(var(--surface-400, 91 101 87));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;white-space:nowrap;cursor:pointer;}.ds-tab[aria-pressed=\"true\"]{color:rgb(var(--primary-400, 30 66 52));border-bottom-color:rgb(var(--primary-500, 39 75 62));font-weight:600;}.ds-tab:hover{color:rgb(var(--primary-400, 30 66 52));}.ds-tab:focus-visible{outline:2px solid rgb(var(--primary-500, 39 75 62));outline-offset:3px;border-radius:3px;}"
+    },
+    {
+      "name": "Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "A compact secondary label on a muted surface.",
+      "html": "<span class=\"ds-tag\">Kitchenware</span>",
+      "css": ".ds-tag{display:inline-flex;align-items:center;padding:4px 8px;border-radius:4px;background:rgb(var(--surface-800, 221 224 210));color:rgb(var(--surface-300, 71 81 70));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:12px;line-height:16px;}"
+    },
+    {
+      "name": "Form card",
       "kind": "card",
       "refersTo": "card",
-      "description": "A shared card with the larger padding used by Settings forms.",
-      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">Scan limits</h2><p class=\"ds-card-copy\">Control image detail, output length, and local memory use.</p></section>",
-      "css": ".ds-card{min-width:0;max-width:100%;padding:20px;background:#141416;border:1px solid #1E1E22;border-radius:8px}.ds-card-title{margin:0;color:#F4F4F5;font:600 20px/28px \"Space Grotesk\",Inter,system-ui,sans-serif}.ds-card-copy{margin:8px 0 0;color:#9A9AA3;font:400 14px/20px Inter, system-ui, -apple-system, sans-serif}@media(min-width:640px){.ds-card{padding:24px}}"
+      "description": "An enclosed panel for related fields or feedback.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">Containers</h2><p class=\"ds-card-copy\">Choose where to keep an item.</p></section>",
+      "css": ".ds-card{min-width:0;max-width:100%;padding:16px;border:1px solid rgb(var(--surface-800, 221 224 210));border-radius:8px;background:rgb(var(--surface-900, 252 250 245));color:rgb(var(--surface-300, 71 81 70));}.ds-card-title{margin:0 0 8px;font-family:Lora,Georgia,serif;font-size:18px;font-weight:400;line-height:28px;color:rgb(var(--surface-100, 31 40 33));}.ds-card-copy{margin:0;font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:16px;line-height:24px;}"
     },
     {
-      "name": "Status panel",
+      "name": "Theme switch",
       "kind": "custom",
-      "description": "A written success or error message follows the related action.",
-      "html": "<div class=\"ds-feedback ds-feedback-success\" role=\"status\">Scan limits saved. New scans use these values.</div>",
-      "css": ".ds-feedback{padding:12px 16px;border:1px solid;border-radius:6px;font:400 14px/20px Inter, system-ui, -apple-system, sans-serif}.ds-feedback-success{color:#86efac;border-color:#14532d;background:rgb(5 46 22 / 0.2)}.ds-feedback-error{color:#fca5a5;border-color:#7f1d1d;background:rgb(69 10 10 / 0.2)}"
+      "refersTo": "theme-toggle",
+      "description": "The shared light and dark control, including inside review.",
+      "html": "<button type=\"button\" class=\"ds-theme\" role=\"switch\" aria-checked=\"false\" aria-label=\"Dark mode\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4L19 5\"/></svg><span>Dark mode</span><span class=\"ds-track\" aria-hidden=\"true\"><span class=\"ds-thumb\"></span></span></button>",
+      "css": ".ds-theme{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:rgb(var(--surface-300, 71 81 70));font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;cursor:pointer;}.ds-theme:hover{background:rgb(var(--surface-800, 221 224 210));}.ds-theme:focus-visible{outline:2px solid rgb(var(--primary-500, 39 75 62));outline-offset:3px;border-radius:3px;}.ds-track{position:relative;display:block;width:36px;height:20px;border-radius:9999px;background:rgb(var(--surface-700, 188 196 177));}.ds-thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:9999px;background:rgb(var(--surface-900, 252 250 245));transition:transform 150ms ease-out;}.ds-theme[aria-checked=\"true\"] .ds-track{background:rgb(var(--primary-500, 39 75 62));}.ds-theme[aria-checked=\"true\"] .ds-thumb{transform:translateX(16px);}@media(prefers-reduced-motion:reduce){[class^=\"ds-\"]{transition-duration:0.001ms!important;animation:none!important}}"
+    },
+    {
+      "name": "Open item caption",
+      "kind": "custom",
+      "description": "A gallery caption with its name and written storage location.",
+      "html": "<article class=\"ds-item\"><button type=\"button\" class=\"ds-item-open\" aria-label=\"Open Coffee grinder\"><span class=\"ds-item-title\">Coffee grinder</span><span class=\"ds-item-meta\">Coffee</span><span class=\"ds-item-meta\">In: Coffee shelf</span></button></article>",
+      "css": ".ds-item{min-width:0;}.ds-item-open{display:block;width:100%;padding:12px 0 0;text-align:left;border:0;border-radius:2px;background:transparent;cursor:pointer;}.ds-item-title{display:block;font-family:Lora,Georgia,serif;font-size:18px;font-weight:500;line-height:1.375;color:rgb(var(--surface-100, 31 40 33));overflow-wrap:break-word;}.ds-item-meta{display:block;margin-top:4px;font-family:\"Source Sans 3\",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;color:rgb(var(--surface-400, 91 101 87));overflow-wrap:break-word;}.ds-item-open:hover .ds-item-title{color:rgb(var(--primary-400, 30 66 52));}.ds-item-open:focus-visible{outline:2px solid rgb(var(--primary-500, 39 75 62));outline-offset:3px;border-radius:3px;}"
     }
   ],
   "narrative": {
-    "northStar": "Charcoal and safety yellow",
-    "overview": "The interface uses charcoal surfaces and a safety-yellow accent. A faint square grid sits behind solid panels. Space Grotesk headings and Inter controls give each page a clear reading order.",
+    "northStar": "Folio: a personal editorial archive",
+    "overview": "Folio makes household photographs and storage locations the main content. Warm ivory, forest green, serif headings, and open galleries give the collection a clear reading order. Fine dividers separate controls without enclosing every object.\n\nDark mode preserves the same composition. Deep green replaces the ivory canvas, while warm text and pale sage controls retain the hierarchy. Phone scanning and desktop browsing share the same visual system.",
     "keyCharacteristics": [
-      "Charcoal panels with quiet borders.",
-      "Yellow actions and selected states.",
-      "Rounded controls with visible keyboard focus."
+      "Open photo galleries with names and written storage locations.",
+      "Lora headings paired with Source Sans 3 controls.",
+      "Flat surfaces, fine dividers, and small corner radii.",
+      "One shared theme choice across navigation, Settings, and scan review."
     ],
     "rules": [
       {
-        "name": "The Action Color Rule",
-        "body": "Yellow marks primary actions. Red marks destructive actions.",
+        "name": "The Shared Theme Rule",
+        "body": "Use the shared theme variables on every surface, including modal review.",
         "section": "colors"
+      },
+      {
+        "name": "The Photo Proportion Rule",
+        "body": "Preserve object proportions when a gallery or review frame crops the source photograph.",
+        "section": "components"
+      },
+      {
+        "name": "The Visible Location Rule",
+        "body": "Keep each item’s storage location beside its name or editable name field.",
+        "section": "components"
       }
     ],
     "dos": [
-      "Do use the existing font families and color roles.",
-      "Do pair status colors with readable text.",
-      "Do let control groups wrap and long model names break.",
-      "Do retain visible keyboard focus and reduced-motion support."
+      "Do use the shared theme variables and local font files.",
+      "Do show object photographs with written locations.",
+      "Do preserve keyboard focus, touch targets, and reduced-motion support.",
+      "Do keep status text visible beside its related action.",
+      "Do retain review controls for uncertain items and missing destinations."
     ],
     "donts": [
-      "Don't use the primary action style for catalogue deletion.",
-      "Don't use selection color as the only indication of an active provider."
+      "Don't stretch objects to fill gallery or review frames.",
+      "Don't use generated concept photographs as catalogue records.",
+      "Don't add decorative grids, gradients, or button glows to Folio.",
+      "Don't identify active providers or review warnings through color alone.",
+      "Don't present synthetic browser checks as proof of physical camera capture or backend persistence."
     ]
   }
 }

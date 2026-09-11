@@ -34,3 +34,4 @@ detector/mobileclip*.ts
 
 # Generated interface review captures
 .impeccable/review/
+.impeccable
