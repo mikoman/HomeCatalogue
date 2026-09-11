@@ -2,6 +2,7 @@
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from app.config import settings
 from app.runtime_env import default_provider_url, running_in_docker, suggested_provider_urls
@@ -18,12 +19,13 @@ def _settings_path() -> Path:
 
 
 SETTINGS_FILE = _settings_path()
+_PROVIDERS = {"ollama", "lmstudio", "openai", "anthropic", "omlx"}
 
 
 def _defaults() -> dict:
     return {
         "provider": settings.ai_provider.lower()
-        if settings.ai_provider.lower() in ("ollama", "lmstudio")
+        if settings.ai_provider.lower() in _PROVIDERS
         else "ollama",
         "ollama_base_url": settings.ollama_base_url or default_provider_url("ollama"),
         "ollama_model": settings.ollama_model,
@@ -44,9 +46,17 @@ def load_settings() -> dict:
     if SETTINGS_FILE.exists():
         try:
             stored = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-            data.update({k: v for k, v in stored.items() if v is not None})
+            if isinstance(stored, dict):
+                data.update({
+                    key: value for key, value in stored.items()
+                    if key in data and isinstance(value, type(data[key]))
+                })
+                if "box_source" not in stored and stored.get("detector_enabled") is True:
+                    data["box_source"] = "yolo"
         except (json.JSONDecodeError, OSError):
             pass
+    if data["provider"].lower() not in _PROVIDERS:
+        data["provider"] = _defaults()["provider"]
     return data
 
 
@@ -54,7 +64,15 @@ def save_settings(data: dict) -> dict:
     merged = _defaults()
     merged.update(data)
     SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=SETTINGS_FILE.parent, delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            json.dump(merged, temporary, indent=2)
+        os.replace(temporary_path, SETTINGS_FILE)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
     return merged
 
 
@@ -75,19 +93,19 @@ def get_effective_ai_config() -> dict:
             "model": data["lmstudio_model"],
         }
     # Env-only cloud / legacy providers when not configured via settings UI.
-    if settings.ai_provider.lower() == "openai":
+    if provider == "openai":
         return {
             "provider": "openai",
             "base_url": "",
             "model": settings.openai_model,
         }
-    if settings.ai_provider.lower() == "anthropic":
+    if provider == "anthropic":
         return {
             "provider": "anthropic",
             "base_url": "",
             "model": settings.anthropic_model,
         }
-    if settings.ai_provider.lower() == "omlx":
+    if provider == "omlx":
         return {
             "provider": "omlx",
             "base_url": settings.omlx_base_url.rstrip("/"),
@@ -150,12 +168,17 @@ def get_detector_config() -> dict | None:
 def settings_for_api() -> dict:
     data = load_settings()
     provider = data["provider"].lower()
+    effective = get_effective_ai_config()
+    if provider not in {"ollama", "lmstudio"}:
+        provider = "ollama"
     if provider == "ollama":
         base_url, model = data["ollama_base_url"], data["ollama_model"]
     else:
         base_url, model = data["lmstudio_base_url"], data["lmstudio_model"]
     return {
         "provider": provider,
+        "effective_provider": effective["provider"],
+        "effective_model": effective["model"],
         "base_url": base_url,
         "model": model,
         "embedding_model": data.get(f"{provider}_embedding_model", ""),

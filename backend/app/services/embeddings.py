@@ -52,3 +52,26 @@ def embed_source(item) -> str:
     if item.tags:
         parts.append(" ".join(item.tags))
     return " ".join(p for p in parts if p).strip()
+
+
+def index_saved_items(item_ids: list[int]) -> None:
+    """Index saved items without delaying the save response or database writes."""
+    from app.database import SessionLocal
+    from app.models.item import Item
+
+    for item_id in item_ids:
+        with SessionLocal() as db:
+            item = db.get(Item, item_id)
+            if item is None:
+                continue
+            source = embed_source(item)
+            version = item.updated_at
+        vector = embed_text(source)
+        if vector is None:
+            return
+        with SessionLocal() as db:
+            db.query(Item).filter(
+                Item.id == item_id,
+                Item.updated_at == version,
+            ).update({Item.embedding: vector, Item.updated_at: version}, synchronize_session=False)
+            db.commit()

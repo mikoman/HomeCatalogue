@@ -9,6 +9,7 @@ gateway timeouts, client disconnects, and refreshes.
 
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy.orm import relationship
 from app.database import Base
 
 
@@ -29,6 +30,8 @@ class ScanSession(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+    room = relationship("Room", back_populates="scan_sessions")
 
     def __repr__(self):
         return f"<ScanSession(id={self.id}, status='{self.status}', room_id={self.room_id})>"

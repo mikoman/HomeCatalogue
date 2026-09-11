@@ -2,7 +2,9 @@
 
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -21,6 +23,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrate_scan_sessions()
     _migrate_items()
+    scan.recover_interrupted_scans()
     # Ensure upload directory exists
     os.makedirs(settings.upload_dir, exist_ok=True)
     yield
@@ -74,7 +77,7 @@ app.include_router(export.router)
 app.include_router(settings_router.router)
 
 # Serve uploaded files
-app.mount("/api/storage", StaticFiles(directory=settings.upload_dir), name="storage")
+app.mount("/api/storage", StaticFiles(directory=settings.upload_dir, check_dir=False), name="storage")
 
 
 @app.get("/api/health")
@@ -92,13 +95,28 @@ def health_check():
 # Serve the frontend in production
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "../../frontend/dist")
 
-if os.path.exists(FRONTEND_DIST):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+
+def serve_frontend_file(full_path: str, directory: str | Path) -> FileResponse:
+    """Serve frontend files and SPA routes without exposing files outside the build."""
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    root = Path(directory).resolve()
+    try:
+        requested = (root / full_path).resolve()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+    if not requested.is_relative_to(root):
+        raise HTTPException(status_code=404, detail="File not found")
+    if requested.is_file():
+        return FileResponse(requested)
+    index = (root / "index.html").resolve()
+    if requested.suffix or not index.is_relative_to(root) or not index.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(index)
+
+
+if os.path.isdir(FRONTEND_DIST):
 
     @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        """Serve the frontend SPA for all non-API routes."""
-        file_path = os.path.join(FRONTEND_DIST, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
+    def serve_frontend(full_path: str):
+        return serve_frontend_file(full_path, FRONTEND_DIST)

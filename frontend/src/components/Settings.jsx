@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { aiSettings, detector as detectorApi, items as itemsApi } from '../api/client';
+import Modal from './Modal';
 
 const PROVIDERS = [
   { id: 'ollama', label: 'Ollama' },
@@ -7,7 +8,11 @@ const PROVIDERS = [
 ];
 
 export default function Settings() {
+  const modelRequest = useRef(0);
+  const connectionRequest = useRef(0);
   const [provider, setProvider] = useState('ollama');
+  const [effectiveProvider, setEffectiveProvider] = useState('');
+  const [effectiveModel, setEffectiveModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
   const [embeddingModel, setEmbeddingModel] = useState('');
@@ -40,19 +45,23 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
 
   const loadModels = useCallback(async (prov, url) => {
+    const requestId = ++modelRequest.current;
+    setModels([]);
     if (!url?.trim()) return;
     setLoadingModels(true);
     setModelsError(null);
     try {
       const data = await aiSettings.listModels(prov, url.trim());
+      if (requestId !== modelRequest.current) return;
       setModels(data.models || []);
       if (data.error) setModelsError(data.error);
       else if ((data.models || []).length === 0) setModelsError('No models found on this server.');
     } catch (err) {
+      if (requestId !== modelRequest.current) return;
       setModels([]);
       setModelsError(err.message);
     } finally {
-      setLoadingModels(false);
+      if (requestId === modelRequest.current) setLoadingModels(false);
     }
   }, []);
 
@@ -63,6 +72,8 @@ export default function Settings() {
         const data = await aiSettings.get();
         if (cancelled) return;
         setProvider(data.provider);
+        setEffectiveProvider(data.effective_provider || data.provider);
+        setEffectiveModel(data.effective_model || data.model);
         setBaseUrl(data.base_url);
         setModel(data.model);
         setEmbeddingModel(data.embedding_model || '');
@@ -83,17 +94,20 @@ export default function Settings() {
         });
         setBoxSource(data.box_source || (data.detector_enabled ? 'yolo' : 'off'));
         setDetectorUrl(data.detector_base_url || '');
-        await loadModels(data.provider, data.base_url);
+        setLoading(false);
+        loadModels(data.provider, data.base_url);
       } catch (err) {
         if (!cancelled) setError(err.message);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; modelRequest.current += 1; connectionRequest.current += 1; };
   }, [loadModels]);
 
   const applySuggestedUrl = async (url) => {
+    connectionRequest.current += 1;
+    setTesting(false);
     setBaseUrl(url);
     setSaved(false);
     setTestResult(null);
@@ -101,6 +115,8 @@ export default function Settings() {
   };
 
   const handleProviderChange = async (nextProvider) => {
+    connectionRequest.current += 1;
+    setTesting(false);
     setProvider(nextProvider);
     setSaved(false);
     setTestResult(null);
@@ -117,24 +133,28 @@ export default function Settings() {
 
   const handleTestConnection = async () => {
     if (!baseUrl.trim()) return;
+    const requestId = ++connectionRequest.current;
     setTesting(true);
     setTestResult(null);
     setError(null);
     try {
       const result = await aiSettings.testConnection(provider, baseUrl.trim());
+      if (requestId !== connectionRequest.current) return;
       setTestResult(result);
       if (result.ok && result.model_count > 0) {
         await loadModels(provider, baseUrl.trim());
       }
     } catch (err) {
+      if (requestId !== connectionRequest.current) return;
       setTestResult({ ok: false, message: err.message, latency_ms: 0, model_count: 0 });
     } finally {
-      setTesting(false);
+      if (requestId === connectionRequest.current) setTesting(false);
     }
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (saving) return;
     if (!model.trim()) {
       setError('Select a model before saving.');
       return;
@@ -143,12 +163,14 @@ export default function Settings() {
     setError(null);
     setSaved(false);
     try {
-      await aiSettings.update({
+      const result = await aiSettings.update({
         provider,
         base_url: baseUrl.trim(),
         model: model.trim(),
         embedding_model: embeddingModel.trim(),
       });
+      setEffectiveProvider(result.effective_provider || provider);
+      setEffectiveModel(result.effective_model || model.trim());
       setStoredUrls(prev => ({ ...prev, [provider]: baseUrl.trim() }));
       setStoredModels(prev => ({ ...prev, [provider]: model.trim() }));
       setStoredEmbeddingModels(prev => ({ ...prev, [provider]: embeddingModel.trim() }));
@@ -227,14 +249,15 @@ export default function Settings() {
   return (
     <div className="space-y-8 animate-rise max-w-xl">
       <header>
-        <p className="eyebrow">Configuration</p>
         <h1 className="font-display text-3xl font-bold tracking-tight text-surface-100 mt-1">
-          AI Provider
+          AI settings
         </h1>
         <p className="text-surface-400 mt-2">
-          Choose where scan photos are analysed. Models are loaded live from your local server.
+          Connect a vision model to turn photos into item suggestions. You can add items manually at any time.
         </p>
       </header>
+
+      {effectiveProvider && <p className="text-sm text-surface-300 break-words">Scans currently use <strong className="text-surface-100">{effectiveProvider}</strong>{effectiveModel ? ` · ${effectiveModel}` : ''}.{!PROVIDERS.some(value => value.id === effectiveProvider) && ' Saving a local provider below will switch new scans to that provider.'}</p>}
 
       {runningInDocker && (
         <div className="card border-primary-900/50 bg-primary-950/20 py-3 px-4">
@@ -246,7 +269,7 @@ export default function Settings() {
       )}
 
       {error && (
-        <div className="card border-red-900 bg-red-950/30 py-3">
+        <div className="card border-red-900 bg-red-950/30 py-3" role="alert">
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
@@ -282,6 +305,8 @@ export default function Settings() {
               <button
                 key={p.id}
                 type="button"
+                aria-pressed={provider === p.id}
+                disabled={saving}
                 onClick={() => handleProviderChange(p.id)}
                 className={`px-4 py-3 rounded-md border text-left transition-colors ${
                   provider === p.id
@@ -325,13 +350,16 @@ export default function Settings() {
               )}
             </div>
           )}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               type="url"
+              aria-label="Server URL"
+              required
+              disabled={saving}
               value={baseUrl}
-              onChange={(e) => { setBaseUrl(e.target.value); setSaved(false); setTestResult(null); }}
+              onChange={(e) => { setBaseUrl(e.target.value); setSaved(false); setTestResult(null); modelRequest.current += 1; connectionRequest.current += 1; setModels([]); setLoadingModels(false); setTesting(false); }}
               placeholder={runningInDocker ? suggestedUrls.docker : suggestedUrls.local}
-              className="input-field text-sm flex-1"
+              className="input-field text-sm sm:flex-1 sm:min-w-0"
             />
             <button
               type="button"
@@ -366,6 +394,8 @@ export default function Settings() {
           )}
           {models.length > 0 ? (
             <select
+              aria-label="Vision model"
+              disabled={saving}
               value={model}
               onChange={(e) => { setModel(e.target.value); setSaved(false); }}
               className="input-field text-sm w-full"
@@ -378,6 +408,8 @@ export default function Settings() {
           ) : (
             <input
               type="text"
+              aria-label="Vision model"
+              disabled={saving}
               value={model}
               onChange={(e) => { setModel(e.target.value); setSaved(false); }}
               placeholder={provider === 'ollama' ? 'e.g. llava' : 'Model id from LM Studio'}
@@ -389,13 +421,16 @@ export default function Settings() {
           </p>
         </div>
 
-        <div className="pt-1 border-t border-surface-800 space-y-3">
+        <details className="pt-3 border-t border-surface-800 space-y-3">
+          <summary className="cursor-pointer text-sm text-surface-300 py-2">Optional: search by meaning</summary>
           <div>
             <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
               Embedding model · semantic search
             </label>
             <input
               type="text"
+              aria-label="Embedding model"
+              disabled={saving}
               list="embed-models"
               value={embeddingModel}
               onChange={(e) => { setEmbeddingModel(e.target.value); setSaved(false); }}
@@ -420,7 +455,7 @@ export default function Settings() {
             )}
           </div>
           <p className="text-xs text-surface-500">Save settings first, then reindex so existing items become searchable by meaning.</p>
-        </div>
+        </details>
 
         <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
           {saving ? 'Saving…' : 'Save settings'}
@@ -429,7 +464,6 @@ export default function Settings() {
 
       <div className="card space-y-4">
         <div>
-          <p className="eyebrow">Bounding boxes</p>
           <h2 className="font-display text-lg font-semibold text-surface-100 mt-1">Detection mode</h2>
           <p className="text-sm text-surface-400 mt-1">
             Choose how scanned items get outlined boxes on the photo.
@@ -445,6 +479,7 @@ export default function Settings() {
             <button
               key={opt.id}
               type="button"
+              aria-pressed={boxSource === opt.id}
               onClick={() => { setBoxSource(opt.id); setDetectorSaved(false); }}
               className={`px-3 py-2.5 rounded-md border text-left transition-colors ${
                 boxSource === opt.id
@@ -468,6 +503,7 @@ export default function Settings() {
             <div className="flex gap-2">
               <input
                 type="url"
+                aria-label="Detector URL"
                 value={detectorUrl}
                 onChange={(e) => { setDetectorUrl(e.target.value); setDetectorSaved(false); setDetectorTestResult(null); }}
                 placeholder={runningInDocker ? 'http://host.docker.internal:8077' : 'http://localhost:8077'}
@@ -512,7 +548,6 @@ export default function Settings() {
 
       <div className="card border-red-900/50 bg-red-950/10 space-y-3">
         <div>
-          <p className="eyebrow text-red-400">Danger zone</p>
           <h2 className="font-display text-lg font-semibold text-surface-100 mt-1">Reset catalogue</h2>
           <p className="text-sm text-surface-400 mt-1">
             Permanently delete every house, room, container, item, and uploaded image so you can start from scratch. Your AI provider settings are kept. This cannot be undone.
@@ -528,17 +563,7 @@ export default function Settings() {
       </div>
 
       {showReset && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => !resetting && setShowReset(false)}
-        >
-          <div
-            className="card w-full max-w-md animate-rise border-red-900"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reset-title"
-          >
+        <Modal labelledBy="reset-title" busy={resetting} onClose={() => setShowReset(false)} className="border-red-900">
             <div className="flex items-start gap-3 mb-4">
               <div className="w-10 h-10 rounded-lg bg-red-950/50 border border-red-900/50 grid place-items-center flex-shrink-0">
                 <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -546,7 +571,6 @@ export default function Settings() {
                 </svg>
               </div>
               <div className="min-w-0">
-                <p className="eyebrow text-red-400 mb-1">Irreversible</p>
                 <h3 id="reset-title" className="font-display text-xl font-semibold text-surface-100">
                   Delete everything?
                 </h3>
@@ -565,6 +589,8 @@ export default function Settings() {
 
             <input
               type="text"
+              aria-label="Type DELETE to confirm"
+              disabled={resetting}
               value={resetConfirm}
               onChange={(e) => setResetConfirm(e.target.value)}
               placeholder="DELETE"
@@ -590,8 +616,7 @@ export default function Settings() {
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

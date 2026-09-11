@@ -1,5 +1,7 @@
 <div align="center">
 
+The September 2026 update adds faster capture, recoverable reviews, atomic saves, and clearer mobile controls. See the [code and usability review](docs/app-review.md) for changes, validation, and remaining work.
+
 # 🏠 Home Catalogue
 
 ### Point your camera at a shelf. Walk away with a searchable inventory.
@@ -245,7 +247,7 @@ Open Settings → Pick provider (Ollama / LM Studio)
 
 ### ☁️ Cloud providers — via `.env` only
 
-OpenAI and Anthropic are environment-configured and **not** exposed in the Settings UI. When `AI_PROVIDER` is `openai` or `anthropic`, scans use that cloud provider regardless of the Settings selection.
+OpenAI and Anthropic use environment configuration. An explicit `AI_PROVIDER` supplies the default when no saved provider choice exists. Saving a local provider in Settings overrides that default for new scans. Settings also shows the effective provider and model.
 
 ```env
 # OpenAI
@@ -302,9 +304,10 @@ Every vision response is validated against this schema before anything touches t
 <details open>
 <summary><b>🏗️ Flow A — Set up your space</b></summary>
 
-1. Create a **House** (e.g. _"Main Home"_)
-2. Add **Rooms** (_"Kitchen"_, _"Living Room"_)
-3. Optionally add containers manually — or let scans propose them
+1. Open **Your catalogue**.
+2. Enter a property name and a room or space name in the first form.
+3. Select **Create space and continue**.
+4. Add containers later, or review the containers proposed by a scan.
 </details>
 
 <details>
@@ -318,11 +321,11 @@ Every vision response is validated against this schema before anything touches t
 <details>
 <summary><b>📷 Flow C — Scan a room</b></summary>
 
-1. Open a Room on mobile or desktop
-2. Tap **Scan area** → camera opens natively
-3. Snap a photo — it enqueues instantly, so keep shooting
-4. AI processes each image in the background; the UI polls for completion
-5. Tap **Review** on a completed scan
+1. Open a room, or use **Scan** to choose a space.
+2. Select **Take photo** or **Choose photos**.
+3. Keep the page open while photos upload. The library supports multiple photos.
+4. Watch the preparation, upload, and analysis states.
+5. Open a completed scan to review the suggestions.
 </details>
 
 <details>
@@ -336,12 +339,13 @@ Every vision response is validated against this schema before anything touches t
 <details>
 <summary><b>📝 Flow E — Review before filing</b></summary>
 
-1. Compare the source image and detected entries side by side
-2. Edit item names inline
-3. Check **This is a container** for storage misclassified as items
-4. Set per-item destination (**File in** / **Place under**)
-5. Remove false positives
-6. Tap **File** to commit everything to the database
+1. Open a completed scan.
+2. Check the names against the source photo.
+3. Clear the selection for false detections. You can select them again before saving.
+4. Change the category or destination when needed. Storage objects can become containers.
+5. Save the selected results. The server saves the review in one transaction.
+
+Review drafts remain in this browser after refresh when browser storage is available. The server restores uploaded scans independently.
 </details>
 
 <details>
@@ -489,6 +493,8 @@ House (id, name, description)
 |--------|----------|-------------|
 | `POST` | `/api/scan/upload` | Upload image; returns `scan_session_id` immediately (async inference) |
 | `GET` | `/api/scan/{session_id}` | Poll scan status and result |
+| `GET` | `/api/scan/active?room_id={id}` | Restore active and unsaved scans for a room |
+| `POST` | `/api/scan/{session_id}/accept` | Save one reviewed scan atomically and return a reusable receipt |
 | `GET` | `/api/scan/pending/{session_id}` | Low-confidence items from a session |
 </details>
 
@@ -507,10 +513,10 @@ House (id, name, description)
 
 ## 💾 Storage & Backup
 
-Uploaded images live in `storage/uploads/` with session-scoped filenames:
+Uploaded images live in `storage/uploads/` with generated filenames. New uploads become JPEG files with normalised orientation and no original metadata:
 
 ```
-storage/uploads/{scan_session_id}_{original_filename}
+storage/uploads/{scan_session_id}_{upload_file_id}.jpg
 ```
 
 | What | How |

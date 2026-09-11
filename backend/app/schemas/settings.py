@@ -8,6 +8,8 @@ LOCAL_PROVIDERS = ("ollama", "lmstudio")
 
 class AISettingsRead(BaseModel):
     provider: str
+    effective_provider: str
+    effective_model: str
     base_url: str
     model: str
     embedding_model: str = ""

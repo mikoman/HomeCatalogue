@@ -28,7 +28,7 @@ export default {
           200: '#E4E4E7',
           300: '#C7C7CD', // body text
           400: '#9A9AA3', // secondary text
-          500: '#6B6B73', // muted / placeholder
+          500: '#92929B', // muted text and placeholders
           600: '#46464D',
           700: '#2C2C31', // hover borders
           800: '#1E1E22', // borders

@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.container import Container
 from app.models.room import Room
 from app.models.item import Item
+from app.models.scan_session import ScanSession
 from app.schemas.container import ContainerCreate, ContainerUpdate, ContainerRead, ContainerMove
 
 router = APIRouter(prefix="/api/containers", tags=["containers"])
@@ -40,7 +41,7 @@ def list_containers(
 def create_container(data: ContainerCreate, db: Session = Depends(get_db)):
     if not db.query(Room).filter(Room.id == data.room_id).first():
         raise HTTPException(status_code=404, detail="Room not found")
-    if data.parent_id:
+    if data.parent_id is not None:
         parent = db.query(Container).filter(Container.id == data.parent_id).first()
         if not parent or parent.room_id != data.room_id:
             raise HTTPException(status_code=400, detail="Invalid parent container")
@@ -85,7 +86,7 @@ def move_container(container_id: int, data: ContainerMove, db: Session = Depends
             .filter(Container.parent_id.in_(frontier))
             .all()
         )
-        child_ids = [c.id for c in children]
+        child_ids = [c.id for c in children if c.id not in subtree_ids]
         if not child_ids:
             break
         subtree_ids.update(child_ids)
@@ -103,6 +104,9 @@ def move_container(container_id: int, data: ContainerMove, db: Session = Depends
     # Re-home all items inside any container in the subtree.
     db.query(Item).filter(Item.container_id.in_(subtree_ids)).update(
         {Item.room_id: target_room.id}, synchronize_session=False
+    )
+    db.query(ScanSession).filter(ScanSession.container_id.in_(subtree_ids)).update(
+        {ScanSession.room_id: target_room.id}, synchronize_session=False
     )
 
     db.commit()
@@ -123,7 +127,19 @@ def update_container(container_id: int, data: ContainerUpdate, db: Session = Dep
     container = db.query(Container).filter(Container.id == container_id).first()
     if not container:
         raise HTTPException(status_code=404, detail="Container not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if "parent_id" in changes and changes["parent_id"] is not None:
+        parent_id = changes["parent_id"]
+        visited = {container.id}
+        while parent_id is not None:
+            if parent_id in visited:
+                raise HTTPException(status_code=400, detail="A container cannot contain itself or one of its parents.")
+            visited.add(parent_id)
+            parent = db.get(Container, parent_id)
+            if not parent or parent.room_id != container.room_id:
+                raise HTTPException(status_code=400, detail="The parent container must belong to this room.")
+            parent_id = parent.parent_id
+    for key, value in changes.items():
         setattr(container, key, value)
     db.commit()
     db.refresh(container)
@@ -141,7 +157,7 @@ def _gather_subtree_levels(db: Session, container_id: int) -> tuple[set[int], li
             .filter(Container.parent_id.in_(frontier))
             .all()
         )
-        child_ids = [c.id for c in children]
+        child_ids = [c.id for c in children if c.id not in subtree_ids]
         if not child_ids:
             break
         levels.append(child_ids)
@@ -173,6 +189,9 @@ def delete_container(
         items_query.delete(synchronize_session=False)
     else:
         items_query.update({Item.container_id: None}, synchronize_session=False)
+    db.query(ScanSession).filter(ScanSession.container_id.in_(subtree_ids)).update(
+        {ScanSession.container_id: None}, synchronize_session=False
+    )
 
     # Bulk-delete containers deepest-first so parent_id FKs stay valid.
     for level in reversed(levels):

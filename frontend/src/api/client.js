@@ -5,6 +5,12 @@
 
 const API_BASE = '/api';
 
+function apiError(detail, fallback) {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map(entry => entry.msg || 'Check the entered value.').join(' ');
+  return fallback;
+}
+
 async function request(url, options = {}) {
   const config = {
     headers: {
@@ -18,7 +24,9 @@ async function request(url, options = {}) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(error.detail || `API Error: ${response.status}`);
+    const failure = new Error(apiError(error.detail, `Request failed (${response.status}). Try again.`));
+    failure.status = response.status;
+    throw failure;
   }
 
   if (response.status === 204) return null;
@@ -36,7 +44,7 @@ export const houses = {
 
 // Rooms
 export const rooms = {
-  list: (houseId) => request(`/rooms/?house_id=${houseId}`),
+  list: (houseId) => request(houseId == null ? '/rooms/' : `/rooms/?house_id=${houseId}`),
   get: (id) => request(`/rooms/${id}`),
   create: (data) => request('/rooms/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/rooms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -66,7 +74,7 @@ export const items = {
     const searchParams = new URLSearchParams(params).toString();
     return request(`/items/?${searchParams}`);
   },
-  search: (q) => request(`/items/search?q=${encodeURIComponent(q)}`),
+  search: (q, { semantic = false, signal } = {}) => request(`/items/search?q=${encodeURIComponent(q)}&semantic=${semantic}`, { signal }),
   get: (id) => request(`/items/${id}`),
   create: (data) => request('/items/', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => request(`/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -86,11 +94,12 @@ export const items = {
 // instantly (the AI inference runs in a backend background task). Poll
 // getStatus(sessionId) until status === 'completed' (or 'failed').
 export const scan = {
-  upload: async (roomId, file, { containerId = null } = {}) => {
+  upload: async (roomId, file, { containerId = null, requestId = null } = {}) => {
     const formData = new FormData();
     formData.append('room_id', roomId);
     formData.append('image', file);
     if (containerId != null) formData.append('container_id', containerId);
+    if (requestId) formData.append('request_id', requestId);
 
     const response = await fetch(`${API_BASE}/scan/upload`, {
       method: 'POST',
@@ -99,13 +108,15 @@ export const scan = {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new Error(error.detail || `Scan failed: ${response.status}`);
+      throw new Error(apiError(error.detail, `Upload failed (${response.status}). Try again.`));
     }
 
     // Returns { scan_session_id, status: "pending" } immediately.
     return response.json();
   },
   getStatus: (sessionId) => request(`/scan/${sessionId}`),
+  listActive: (roomId) => request(roomId == null ? '/scan/active' : `/scan/active?room_id=${roomId}`),
+  accept: (sessionId, data) => request(`/scan/${sessionId}/accept`, { method: 'POST', body: JSON.stringify(data) }),
   getPending: (sessionId) => request(`/scan/pending/${sessionId}`),
   listFailed: () => request('/scan/failed'),
   retry: (sessionId) => request(`/scan/${sessionId}/retry`, { method: 'POST' }),

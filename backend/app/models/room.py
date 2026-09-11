@@ -20,6 +20,7 @@ class Room(Base):
     house = relationship("House", back_populates="rooms")
     containers = relationship("Container", back_populates="room", cascade="all, delete-orphan")
     items = relationship("Item", back_populates="room", cascade="all, delete-orphan")
+    scan_sessions = relationship("ScanSession", back_populates="room", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Room(id={self.id}, name='{self.name}', house_id={self.house_id})>"

@@ -2,21 +2,45 @@
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List
 from app.database import get_db
 from app.models.item import Item
 from app.models.room import Room
 from app.models.container import Container
-from app.models.house import House
 from app.models.scan_session import ScanSession
 from app.schemas.item import ItemCreate, ItemUpdate, ItemRead, ItemBulkCreate, ItemMove, ItemSearchResult
 from app.schemas.container import ContainerRead
 from app.services.search import item_search_filter, hybrid_search
-from app.services.embeddings import embed_text, embed_source
+from app.services.embeddings import embed_text, embed_source, index_saved_items
 
 router = APIRouter(prefix="/api/items", tags=["items"])
+
+
+def _validate_location(db: Session, room_id: int, container_id: int | None):
+    room = db.get(Room, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if container_id is not None:
+        container = db.get(Container, container_id)
+        if not container:
+            raise HTTPException(status_code=404, detail="Container not found")
+        if container.room_id != room_id:
+            raise HTTPException(status_code=400, detail="The container must belong to the selected room")
+    return room
+
+
+def _create_payload(db: Session, data: ItemCreate):
+    _validate_location(db, data.room_id, data.container_id)
+    payload = data.model_dump()
+    if data.scan_session_id:
+        scan = db.get(ScanSession, data.scan_session_id)
+        if not scan or scan.room_id != data.room_id:
+            raise HTTPException(status_code=400, detail="The scan must belong to the selected room")
+        if not data.image_path and scan.image_path:
+            payload["image_path"] = os.path.basename(scan.image_path)
+    return payload
 
 
 @router.get("/", response_model=List[ItemRead])
@@ -41,16 +65,29 @@ def list_items(
 
 @router.get("/search", response_model=List[ItemSearchResult])
 def search_items(
-    q: str = Query(..., min_length=1),
+    q: str = Query(..., min_length=1, max_length=500),
     limit: int = Query(100, ge=1, le=200),
+    semantic: bool = False,
     db: Session = Depends(get_db),
 ):
     """Search items across the catalogue with room/house/container context.
 
-    Hybrid: keyword matches first, then semantic matches when an embedding
-    model is configured (see Settings). Falls back to keyword-only otherwise.
+    Related matches use the embedding model only when requested.
     """
-    rows = hybrid_search(db, q, limit=limit)
+    rows = hybrid_search(db, q, limit=limit, semantic=semantic)
+    room_ids = {room.id for _, room, _, _ in rows}
+    containers = db.query(Container).filter(Container.room_id.in_(room_ids)).all() if room_ids else []
+    by_id = {container.id: container for container in containers}
+
+    def container_path(container):
+        names = []
+        seen = set()
+        while container and container.id not in seen:
+            names.append(container.name)
+            seen.add(container.id)
+            container = by_id.get(container.parent_id)
+        return " / ".join(reversed(names)) or None
+
     return [
         ItemSearchResult(
             id=item.id,
@@ -63,51 +100,42 @@ def search_items(
             house_name=house.name,
             container_id=container.id if container else None,
             container_name=container.name if container else None,
+            container_path=container_path(container),
             confidence_score=item.confidence_score,
             image_path=item.image_path,
+            bbox=item.bbox,
         )
         for item, room, house, container in rows
     ]
 
 
 @router.post("/", response_model=ItemRead, status_code=201)
-def create_item(data: ItemCreate, db: Session = Depends(get_db)):
-    if not db.query(Room).filter(Room.id == data.room_id).first():
-        raise HTTPException(status_code=404, detail="Room not found")
-    item = Item(**data.model_dump())
-    item.embedding = embed_text(embed_source(item))  # None if embeddings disabled
+def create_item(data: ItemCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    item = Item(**_create_payload(db, data))
     db.add(item)
     db.commit()
     db.refresh(item)
+    background_tasks.add_task(index_saved_items, [item.id])
     return item
 
 
 @router.post("/bulk", response_model=List[ItemRead], status_code=201)
-def bulk_create_items(data: ItemBulkCreate, db: Session = Depends(get_db)):
+def bulk_create_items(data: ItemBulkCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Create multiple items in a single transaction (used for scan results).
 
     Items carrying a scan_session_id inherit that scan's photo as their
     thumbnail, so the catalogue is visual without a per-item upload.
     """
     created = []
-    image_by_session: dict[str, str | None] = {}
-    for item_data in data.items:
-        payload = item_data.model_dump()
-        sid = payload.get("scan_session_id")
-        if sid and not payload.get("image_path"):
-            if sid not in image_by_session:
-                sess = db.query(ScanSession).filter(ScanSession.id == sid).first()
-                image_by_session[sid] = (
-                    os.path.basename(sess.image_path) if sess and sess.image_path else None
-                )
-            payload["image_path"] = image_by_session[sid]
+    payloads = [_create_payload(db, item_data) for item_data in data.items]
+    for payload in payloads:
         item = Item(**payload)
-        item.embedding = embed_text(embed_source(item))
         db.add(item)
         created.append(item)
     db.commit()
     for item in created:
         db.refresh(item)
+    background_tasks.add_task(index_saved_items, [item.id for item in created])
     return created
 
 
@@ -134,7 +162,7 @@ def move_items(data: ItemMove, db: Session = Depends(get_db)):
             )
 
     moved = []
-    for item_id in data.item_ids:
+    for item_id in dict.fromkeys(data.item_ids):
         item = db.query(Item).filter(Item.id == item_id).first()
         if not item:
             raise HTTPException(status_code=404, detail=f"Item {item_id} not found")
@@ -144,10 +172,11 @@ def move_items(data: ItemMove, db: Session = Depends(get_db)):
                 status_code=400,
                 detail="Cannot move items between houses",
             )
-        item.room_id = target_room.id
-        item.container_id = data.container_id
         moved.append(item)
 
+    for item in moved:
+        item.room_id = target_room.id
+        item.container_id = data.container_id
     db.commit()
     for item in moved:
         db.refresh(item)
@@ -205,17 +234,22 @@ def promote_item_to_container(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{item_id}", response_model=ItemRead)
-def update_item(item_id: int, data: ItemUpdate, db: Session = Depends(get_db)):
+def update_item(item_id: int, data: ItemUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     changes = data.model_dump(exclude_unset=True)
+    if "container_id" in changes:
+        _validate_location(db, item.room_id, changes["container_id"])
     for key, value in changes.items():
         setattr(item, key, value)
-    if changes.keys() & {"name", "category", "tags"}:
-        item.embedding = embed_text(embed_source(item))
+    reindex = bool(changes.keys() & {"name", "category", "tags"})
+    if reindex:
+        item.embedding = None
     db.commit()
     db.refresh(item)
+    if reindex:
+        background_tasks.add_task(index_saved_items, [item.id])
     return item
 
 

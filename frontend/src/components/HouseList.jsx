@@ -1,175 +1,88 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { houses as housesApi } from '../api/client';
+import { useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { houses as housesApi, rooms as roomsApi } from '../api/client';
+import Icon from './Icon';
 
-export default function HouseList({ houses: housesProp, onUpdate }) {
+export default function HouseList({ houses = [], rooms = [], onRefresh, loading, error: loadError, captureMode = false }) {
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [houseId, setHouseId] = useState('');
+  const [newName, setNewName] = useState('My home');
+  const [newRoomName, setNewRoomName] = useState('');
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const createdHouse = useRef(null);
+  let recentRoom = null;
+  try { recentRoom = rooms.find(room => String(room.id) === localStorage.getItem('homeCatalogue:lastRoom')); } catch { /* Storage can be unavailable. */ }
+  const recentHouse = recentRoom && houses.find(house => house.id === recentRoom.house_id);
+  const showForm = showCreate || (!loading && !loadError && rooms.length === 0);
+  const effectiveHouseId = houseId || (houses.length === 1 ? String(houses[0].id) : 'new');
 
-  const houses = housesProp || [];
-
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
+  const handleCreate = async event => {
+    event.preventDefault();
+    if (saving || !newRoomName.trim() || (effectiveHouseId === 'new' && !newName.trim())) return;
+    setSaving(true);
+    setError(null);
     try {
-      const house = await housesApi.create({
-        name: newName.trim(),
-        description: newDescription.trim(),
-      });
-      if (onUpdate) onUpdate([...houses, house]);
-      setNewName('');
-      setNewDescription('');
+      let destination = effectiveHouseId === 'new' ? createdHouse.current : Number(effectiveHouseId);
+      if (!destination) {
+        const house = await housesApi.create({ name: newName.trim() });
+        destination = house.id;
+        createdHouse.current = house.id;
+        setHouseId(String(house.id));
+      }
+      const room = await roomsApi.create({ house_id: destination, name: newRoomName.trim() });
+      await onRefresh();
       setShowCreate(false);
+      setNewRoomName('');
+      navigate(`/rooms/${room.id}`);
     } catch (err) {
       setError(err.message);
+      await onRefresh();
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this house and all its contents?')) return;
-    try {
-      await housesApi.delete(id);
-      if (onUpdate) onUpdate(houses.filter(h => h.id !== id));
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+  if (loading) return <p role="status" className="py-12 text-surface-400">Loading your catalogue…</p>;
+  if (loadError) return <div className="space-y-4 py-8"><h1 className="font-display text-2xl text-surface-100">The catalogue could not load.</h1><p role="alert" className="text-red-300">{loadError}</p><button onClick={onRefresh} className="btn-primary">Try again</button><Link to="/settings" className="text-primary-400 inline-block">Open settings</Link></div>;
 
-  return (
-    <div className="space-y-8 animate-rise">
-      {/* Hero — the catalogue cover */}
-      <header className="relative overflow-hidden rounded-xl border border-surface-800 bg-surface-900 p-6 sm:p-8">
-        <div className="hazard absolute inset-x-0 top-0 h-1 opacity-90" />
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5">
-          <div className="max-w-xl">
-            <p className="eyebrow">Index — {new Date().getFullYear()}</p>
-            <h1 className="mt-2 font-display text-4xl sm:text-5xl font-bold tracking-tight text-surface-100">
-              The Home<br />Catalogue
-            </h1>
-            <p className="mt-3 text-surface-400 leading-relaxed">
-              Photograph a shelf. The catalogue fills itself — every item identified, tagged, and filed where you'll find it.
-            </p>
-          </div>
-          <button onClick={() => setShowCreate(true)} className="btn-primary self-start sm:self-auto">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            New property
-          </button>
-        </div>
-        <div className="mt-6 pt-5 border-t border-surface-800 flex items-center gap-6">
-          <span className="font-mono text-2xl font-bold text-primary-500">{String(houses.length).padStart(2, '0')}</span>
-          <span className="eyebrow">{houses.length === 1 ? 'Property on file' : 'Properties on file'}</span>
-        </div>
-      </header>
+  return <div className="space-y-8">
+    <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+      <div>
+        <h1 className="font-display text-3xl sm:text-4xl font-semibold tracking-tight text-surface-100">{captureMode ? 'Where are you scanning?' : 'Your catalogue'}</h1>
+        <p className="mt-2 text-surface-400 max-w-xl">{captureMode ? 'Choose a room. Take photos, check the results, and save.' : 'A photo now. Less searching later.'}</p>
+      </div>
+      {!captureMode && rooms.length > 0 && <Link to="/capture" className="btn-primary self-start shrink-0"><Icon name="camera" />Scan a space</Link>}
+    </header>
 
-      {error && (
-        <div className="card border-red-900 bg-red-950/30">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="btn-secondary mt-2 text-xs">Dismiss</button>
-        </div>
-      )}
+    {!showForm && recentRoom && <section className="rounded-xl border border-primary-800 bg-surface-900 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-5">
+      <div className="flex-1 min-w-0"><p className="text-sm text-surface-400">Last used room</p><h2 className="text-xl font-display text-surface-100 mt-1 break-words">{recentRoom.name}</h2><p className="text-sm text-surface-400 mt-1">{recentHouse?.name}</p></div>
+      <Link to={`/rooms/${recentRoom.id}`} className="btn-primary self-start"><Icon name="camera" />Continue here</Link>
+    </section>}
 
-      {houses.length === 0 ? (
-        <div className="card text-center py-14">
-          <div className="w-14 h-14 rounded-lg bg-surface-800 grid place-items-center mx-auto mb-4">
-            <svg className="w-7 h-7 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-            </svg>
-          </div>
-          <h3 className="font-display text-lg font-semibold text-surface-200 mb-1">No properties on file</h3>
-          <p className="text-surface-500 mb-5">Add a property to start cataloguing your inventory.</p>
-          <button onClick={() => setShowCreate(true)} className="btn-primary mx-auto">
-            Add your first property
-          </button>
-        </div>
-      ) : (
-        <div>
-          <p className="eyebrow mb-3">Properties</p>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {houses.map((house, i) => (
-              <button
-                key={house.id}
-                onClick={() => navigate(`/houses/${house.id}`)}
-                className="card group text-left hover:border-primary-500/60 hover:-translate-y-0.5
-                           transition-all duration-200 flex flex-col"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono text-[0.7rem] text-surface-500 tracking-wider">
-                    P-{String(i + 1).padStart(2, '0')}
-                  </span>
-                  <span
-                    onClick={(e) => { e.stopPropagation(); handleDelete(house.id); }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-surface-500 hover:text-red-400 transition-all cursor-pointer"
-                    aria-label="Delete house"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </span>
-                </div>
-                <div className="flex items-center gap-2.5 mb-1.5">
-                  <svg className="w-5 h-5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                  <h3 className="font-display text-lg font-semibold text-surface-100 truncate">{house.name}</h3>
-                </div>
-                {house.description ? (
-                  <p className="text-sm text-surface-500 line-clamp-2">{house.description}</p>
-                ) : (
-                  <p className="text-sm text-surface-600 italic">No description</p>
-                )}
-                <span className="mt-4 pt-3 border-t border-surface-800 font-mono text-[0.7rem] uppercase tracking-wider
-                                 text-surface-500 group-hover:text-primary-500 transition-colors flex items-center gap-1.5">
-                  Open property
-                  <svg className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+    {showForm && <section className="rounded-xl border border-surface-700 bg-surface-900 p-5 sm:p-6 max-w-2xl">
+      <h2 className="font-display text-xl font-semibold text-surface-100">{rooms.length === 0 ? 'Start with one space' : 'Add a room or space'}</h2>
+      <p className="text-sm text-surface-400 mt-2">A room, a shelf, or a collection. You can organise the items later.</p>
+      <form onSubmit={handleCreate} className="space-y-4 mt-5">
+        {houses.length > 0 && <div><label htmlFor="start-house" className="field-label">Property</label><select id="start-house" className="input-field" value={effectiveHouseId} onChange={event => { setHouseId(event.target.value); createdHouse.current = null; }} disabled={saving}>{houses.map(house => <option key={house.id} value={house.id}>{house.name}</option>)}<option value="new">Add a property…</option></select></div>}
+        {effectiveHouseId === 'new' && <div><label htmlFor="start-home" className="field-label">Property name</label><input id="start-home" className="input-field" value={newName} onChange={event => { setNewName(event.target.value); createdHouse.current = null; }} maxLength={255} required disabled={saving} /></div>}
+        <div><label htmlFor="start-room" className="field-label">Room or space name</label><input id="start-room" className="input-field" placeholder="For example, Kitchen or Book collection" value={newRoomName} onChange={event => setNewRoomName(event.target.value)} maxLength={255} required disabled={saving} /></div>
+        <div className="flex flex-wrap gap-2" aria-label="Common rooms">{['Kitchen', 'Living room', 'Garage', 'Unsorted'].map(name => <button type="button" key={name} onClick={() => setNewRoomName(name)} disabled={saving} className="px-3 py-2 rounded-lg border border-surface-700 text-sm text-surface-300 hover:border-primary-600">{name}</button>)}</div>
+        {error && <p role="alert" className="text-red-300 text-sm">{error}</p>}
+        <div className="flex gap-3 pt-2"><button type="submit" className="btn-primary" disabled={saving || !newRoomName.trim()}>{saving ? 'Creating your space…' : 'Create space and continue'}<Icon name="arrow" /></button>{rooms.length > 0 && <button type="button" className="btn-secondary" disabled={saving} onClick={() => { setShowCreate(false); setError(null); }}>Cancel</button>}</div>
+      </form>
+    </section>}
 
-      {/* Create house modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCreate(false)}>
-          <div className="card w-full max-w-md animate-rise" onClick={(e) => e.stopPropagation()}>
-            <p className="eyebrow mb-1">New record</p>
-            <h3 className="font-display text-xl font-semibold text-surface-100 mb-4">Add a property</h3>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">Name</label>
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Main home, Lake cabin"
-                  className="input-field"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">Description <span className="text-surface-600 normal-case tracking-normal">(optional)</span></label>
-                <textarea
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="A short note about this property…"
-                  className="input-field resize-none"
-                  rows={2}
-                />
-              </div>
-              <div className="flex gap-3 justify-end pt-1">
-                <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
-                <button type="submit" className="btn-primary">Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    {houses.length > 0 && rooms.length > 0 && <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-display text-xl font-semibold text-surface-100">{captureMode ? 'Choose a space' : 'Your spaces'}</h2><button onClick={() => { setShowCreate(true); setError(null); }} className="btn-secondary text-sm"><Icon name="plus" />Add space</button></div>
+      {houses.map(house => <div key={house.id} className="space-y-2">
+        <div className="flex items-center justify-between gap-3 py-2"><h3 className="text-sm font-medium text-surface-300 break-words">{house.name}</h3><Link to={`/houses/${house.id}`} className="text-sm text-surface-400 hover:text-primary-400 py-2 shrink-0">Manage rooms</Link></div>
+        <div className="divide-y divide-surface-800 border-y border-surface-800">{rooms.filter(room => room.house_id === house.id).map(room => <Link key={room.id} to={`/rooms/${room.id}`} className="group flex items-center gap-4 py-4 px-2 hover:bg-surface-900 transition-colors rounded-md"><span className="p-3 bg-surface-800 rounded-lg text-primary-400"><Icon name="room" /></span><span className="flex-1 min-w-0"><span className="block font-medium text-surface-100 truncate">{room.name}</span><span className="block text-sm text-surface-400 mt-1 truncate">{room.description || (captureMode ? 'Take a photo or choose from your library' : 'View items and scan photos')}</span></span><Icon name={captureMode ? 'camera' : 'arrow'} className="w-5 h-5 text-surface-400 group-hover:text-primary-400 shrink-0" /></Link>)}</div>
+        {!rooms.some(room => room.house_id === house.id) && <Link to={`/houses/${house.id}`} className="block py-3 text-sm text-surface-400">Add the first room in this property.</Link>}
+      </div>)}
+    </section>}
+
+    <footer className="border-t border-surface-800 pt-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between text-sm text-surface-400"><p>Photos become suggestions. You choose what to save.</p><Link to="/settings" className="inline-flex items-center gap-2 text-primary-400 py-2"><Icon name="settings" className="w-4 h-4" />AI settings</Link></footer>
+  </div>;
 }

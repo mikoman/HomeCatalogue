@@ -9,7 +9,6 @@ export default function SearchBar() {
     const q = term.trim();
     if (!q) return;
     navigate(`/search?q=${encodeURIComponent(q)}`);
-    setQuery('');
   };
 
   const handleSubmit = (e) => {
@@ -18,7 +17,7 @@ export default function SearchBar() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="relative">
+    <form onSubmit={handleSubmit} className="relative" role="search" aria-label="Catalogue search">
       <svg
         className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500 pointer-events-none"
         fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -27,12 +26,21 @@ export default function SearchBar() {
       </svg>
       <input
         type="search"
+        aria-label="Search the catalogue"
+        maxLength={500}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search the catalogue…"
-        className="input-field pl-9 text-sm w-full"
+        className="input-field pl-9 pr-20 text-base w-full min-h-11"
         enterKeyHint="search"
       />
+      <button
+        type="submit"
+        disabled={!query.trim()}
+        className="absolute right-1 top-1 bottom-1 px-3 text-sm font-medium text-primary-400 disabled:text-surface-400 disabled:cursor-not-allowed"
+      >
+        Search
+      </button>
     </form>
   );
 }

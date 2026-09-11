@@ -32,3 +32,21 @@ def test_skips_nameless_items_and_missing_containers():
 def test_garbage_raises():
     with pytest.raises(ValueError):
         _extract_json("the model said no")
+
+
+@pytest.mark.parametrize("content", [None, "", "{}", "[]", '{"items": {}}', '{"items": [null, 12, {}]}'])
+def test_unusable_response_requests_retry(content):
+    with pytest.raises(ValueError):
+        _parse_scan_result(content)
+
+
+def test_empty_inventory_is_valid():
+    assert _parse_scan_result('{"items": []}').items == []
+
+
+def test_optional_model_fields_do_not_lose_valid_items():
+    result = _parse_scan_result('{"items": [null, {"name": " Mug ", "tags": " cup ", "confidence_score": null, "detection_label": 4}]}')
+    assert result.items[0].name == "Mug"
+    assert result.items[0].tags == ["cup"]
+    assert result.items[0].confidence_score == 0.5
+    assert result.items[0].detection_label is None

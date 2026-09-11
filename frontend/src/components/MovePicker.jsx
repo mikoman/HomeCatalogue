@@ -1,84 +1,120 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { rooms as roomsApi, containers as containersApi, items as itemsApi } from '../api/client';
 
-/**
- * Move picker modal. Moves items (multi) or a container (single) to another
- * room within the same house. In item mode the user picks a room then
- * optionally a container in it (or "Loose in this room"). In container mode
- * the container becomes a root in the target room (no sub-select).
- *
- * Props:
- *  - sourceRoomId: number — derives the house to scope candidate rooms.
- *  - mode: 'item' | 'container'
- *  - itemIds: number[]   (mode === 'item')
- *  - containerId: number (mode === 'container')
- *  - onDone: () => void  — caller refreshes data + clears selection.
- *  - onClose: () => void — close the modal.
- */
+function containerPaths(containers) {
+  const byId = new Map(containers.map(container => [container.id, container]));
+  return containers.map(container => {
+    const names = [];
+    const seen = new Set();
+    let current = container;
+    while (current && !seen.has(current.id)) {
+      names.unshift(current.name);
+      seen.add(current.id);
+      current = byId.get(current.parent_id);
+    }
+    return { id: container.id, name: names.join(' / ') };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export default function MovePicker({ sourceRoomId, mode, itemIds, containerId, onDone, onClose }) {
   const [rooms, setRooms] = useState([]);
   const [targetRoomId, setTargetRoomId] = useState(null);
   const [containers, setContainers] = useState([]);
   const [targetContainerId, setTargetContainerId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [containersLoading, setContainersLoading] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [containerError, setContainerError] = useState(null);
   const [error, setError] = useState(null);
+  const [retry, setRetry] = useState(0);
+  const [containerRetry, setContainerRetry] = useState(0);
+  const dialogRef = useRef(null);
+  const movingRef = useRef(false);
+  const fieldId = useId();
+  const paths = useMemo(() => containerPaths(containers), [containers]);
 
-  // Load the source room (for house_id) then same-house rooms.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    setError(null);
+    setRooms([]);
+    setTargetRoomId(null);
+    setTargetContainerId(null);
+    setContainers([]);
     (async () => {
       try {
         const source = await roomsApi.get(sourceRoomId);
+        if (cancelled) return;
         const roomList = await roomsApi.list(source.house_id);
         if (cancelled) return;
         setRooms(roomList);
+        setContainersLoading(mode === 'item');
+        setTargetRoomId(source.id);
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setLoadError(err.message || 'The rooms could not load. Try again.');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [sourceRoomId]);
+  }, [sourceRoomId, retry]);
 
-  // When the target room changes, load its containers (item mode only).
   useEffect(() => {
-    if (mode !== 'item' || targetRoomId == null) return;
+    let cancelled = false;
     setTargetContainerId(null);
     setContainers([]);
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await containersApi.list(targetRoomId, null, { includeAll: true });
-        if (!cancelled) setContainers(list);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      }
-    })();
+    setContainerError(null);
+    if (mode !== 'item' || targetRoomId == null) {
+      setContainersLoading(false);
+      return;
+    }
+    setContainersLoading(true);
+    containersApi.list(targetRoomId, null, { includeAll: true })
+      .then(list => { if (!cancelled) setContainers(list); })
+      .catch(err => { if (!cancelled) setContainerError(err.message || 'The containers could not load. Try again.'); })
+      .finally(() => { if (!cancelled) setContainersLoading(false); });
     return () => { cancelled = true; };
-  }, [mode, targetRoomId]);
+  }, [mode, targetRoomId, containerRetry]);
 
-  const handleConfirm = async () => {
-    if (targetRoomId == null) return;
+  const canMove = targetRoomId != null && !loading && !containersLoading && !loadError && !containerError && !moving;
+  const close = () => { if (!movingRef.current) onClose(); };
+
+  const handleConfirm = async (event) => {
+    event.preventDefault();
+    if (!canMove || movingRef.current) return;
+    if (!rooms.some(room => room.id === targetRoomId)) return;
+    if (mode === 'item' && targetContainerId != null && !containers.some(container => container.id === targetContainerId)) return;
+    movingRef.current = true;
     setMoving(true);
     setError(null);
     try {
       if (mode === 'item') {
-        await itemsApi.move({
-          itemIds,
-          roomId: targetRoomId,
-          containerId: targetContainerId,
-        });
+        await itemsApi.move({ itemIds, roomId: targetRoomId, containerId: targetContainerId });
       } else {
         await containersApi.move(containerId, { roomId: targetRoomId });
       }
-      onDone();
+      onDone?.();
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'The move did not save. Try again.');
     } finally {
+      movingRef.current = false;
       setMoving(false);
     }
   };
@@ -88,119 +124,70 @@ export default function MovePicker({ sourceRoomId, mode, itemIds, containerId, o
     : 'container';
 
   return createPortal(
-    <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-      onClick={onClose}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={`${fieldId}-title`}
+      onCancel={event => { event.preventDefault(); close(); }}
+      onClick={event => { if (event.target === event.currentTarget) close(); }}
+      className="w-[calc(100%-2rem)] max-w-md max-h-[90dvh] m-auto p-0 rounded-xl bg-surface-900 text-surface-300 border border-surface-700 backdrop:bg-black/80 backdrop:backdrop-blur-sm"
     >
-      <div
-        className="card w-full max-w-md animate-rise max-h-[90vh] overflow-y-auto mx-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="eyebrow mb-1">Relocate</p>
-        <h3 className="font-display text-xl font-semibold text-surface-100 mb-4">Move {subject}</h3>
-
-        {error && (
-          <div className="card border-red-900 bg-red-950/30 mb-4 py-2.5 px-3">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-
+      <form onSubmit={handleConfirm} className="p-5 space-y-5">
+        <h2 id={`${fieldId}-title`} className="font-display text-xl font-semibold text-surface-100">Move {subject}</h2>
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-surface-800 border-t-primary-500"></div>
+          <p role="status" className="text-surface-400 py-4">Loading rooms…</p>
+        ) : loadError ? (
+          <div className="space-y-3" role="alert">
+            <p className="text-sm text-red-400">{loadError}</p>
+            <button type="button" onClick={() => setRetry(value => value + 1)} className="btn-secondary min-h-11">Try again</button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <>
             <div>
-              <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
-                Destination room
-              </label>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                {rooms.map(room => (
-                  <button
-                    key={room.id}
-                    onClick={() => setTargetRoomId(room.id)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${
-                      targetRoomId === room.id
-                        ? 'bg-surface-800 text-primary-400 ring-1 ring-primary-500/50'
-                        : 'text-surface-300 hover:bg-surface-800'
-                    }`}
-                  >
-                    <svg className="w-4 h-4 flex-shrink-0 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                    <span className="text-sm truncate">{room.name}</span>
-                    {room.id === parseInt(sourceRoomId) && (
-                      <span className="font-mono text-[0.6rem] text-surface-500 ml-auto">current</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {mode === 'item' && targetRoomId != null && containers.length > 0 && (
-              <div>
-                <label className="block font-mono text-[0.7rem] uppercase tracking-wider text-surface-400 mb-1.5">
-                  Into container (optional)
-                </label>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                  <button
-                    onClick={() => setTargetContainerId(null)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${
-                      targetContainerId === null
-                        ? 'bg-surface-800 text-primary-400 ring-1 ring-primary-500/50'
-                        : 'text-surface-300 hover:bg-surface-800'
-                    }`}
-                  >
-                    <span className="text-sm">Loose in this room</span>
-                  </button>
-                  {containers.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => setTargetContainerId(c.id)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors ${
-                        targetContainerId === c.id
-                          ? 'bg-surface-800 text-primary-400 ring-1 ring-primary-500/50'
-                          : 'text-surface-300 hover:bg-surface-800'
-                      }`}
-                    >
-                      <svg className="w-4 h-4 flex-shrink-0 text-surface-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                      <span className="text-sm truncate">{c.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {mode === 'item' && targetRoomId != null && containers.length === 0 && (
-              <p className="text-sm text-surface-500">
-                No containers in this room — items will be filed loose.
-              </p>
-            )}
-
-            {mode === 'container' && (
-              <p className="text-sm text-surface-500">
-                The container becomes a root in the destination room. Its contents move along with it.
-              </p>
-            )}
-
-            <div className="flex gap-3 justify-end pt-1">
-              <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-              <button
-                type="button"
-                onClick={handleConfirm}
-                className="btn-primary"
-                disabled={targetRoomId == null || moving}
+              <label htmlFor={`${fieldId}-room`} className="block text-sm text-surface-300 mb-2">Destination room</label>
+              <select
+                id={`${fieldId}-room`}
+                value={targetRoomId ?? ''}
+                disabled={moving}
+                onChange={event => {
+                  setTargetRoomId(Number(event.target.value));
+                  setTargetContainerId(null);
+                  setContainers([]);
+                  setContainersLoading(mode === 'item');
+                  setContainerError(null);
+                  setError(null);
+                }}
+                className="input-field text-base min-h-11"
               >
-                {moving ? 'Moving…' : `Move ${subject}`}
-              </button>
+                {!rooms.length && <option value="">No rooms available</option>}
+                {rooms.map(room => <option key={room.id} value={room.id}>{room.name}{room.id === Number(sourceRoomId) ? ' (current room)' : ''}</option>)}
+              </select>
             </div>
-          </div>
+            {mode === 'item' && targetRoomId != null && (
+              <div>
+                <label htmlFor={`${fieldId}-container`} className="block text-sm text-surface-300 mb-2">Container</label>
+                {containersLoading ? <p role="status" className="text-sm text-surface-400">Loading containers…</p> : containerError ? (
+                  <div role="alert" className="space-y-3">
+                    <p className="text-sm text-red-400">{containerError}</p>
+                    <button type="button" onClick={() => setContainerRetry(value => value + 1)} className="btn-secondary min-h-11">Try again</button>
+                  </div>
+                ) : (
+                  <select id={`${fieldId}-container`} value={targetContainerId ?? ''} disabled={moving} onChange={event => { setTargetContainerId(event.target.value ? Number(event.target.value) : null); setError(null); }} className="input-field text-base min-h-11">
+                    <option value="">Loose in this room</option>
+                    {paths.map(container => <option key={container.id} value={container.id}>{container.name}</option>)}
+                  </select>
+                )}
+              </div>
+            )}
+            {mode === 'container' && <p className="text-sm text-surface-400">The container and its contents move to the room. It will have no parent container.</p>}
+            {error && <p className="text-sm text-red-400" role="alert">{error}</p>}
+          </>
         )}
-      </div>
-    </div>,
+        <div className="flex flex-wrap gap-3 pt-1">
+          <button type="button" onClick={close} disabled={moving} className="btn-secondary min-h-11">Cancel</button>
+          <button type="submit" disabled={!canMove} className="btn-primary flex-1 min-h-11">{moving ? 'Moving…' : `Move ${subject}`}</button>
+        </div>
+      </form>
+    </dialog>,
     document.body,
   );
 }

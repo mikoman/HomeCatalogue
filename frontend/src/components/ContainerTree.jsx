@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useEffect } from 'react';
 import MovePicker from './MovePicker';
+import { containers as containersApi } from '../api/client';
+import Icon from './Icon';
+import Modal from './Modal';
 
 export default function ContainerTree({ containers, selectedId, onSelect, onAddChild, roomId, onMoved }) {
   const [expanded, setExpanded] = useState({});
@@ -10,6 +12,20 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
   const [deletingContainer, setDeletingContainer] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [addError, setAddError] = useState(null);
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    const ancestors = {};
+    const visited = new Set();
+    let current = containers.find(container => container.id === selectedId);
+    while (current?.parent_id && !visited.has(current.parent_id)) {
+      visited.add(current.parent_id);
+      ancestors[current.parent_id] = true;
+      current = containers.find(container => container.id === current.parent_id);
+    }
+    setExpanded(previous => ({ ...previous, ...ancestors }));
+  }, [selectedId, containers]);
 
   const getChildren = (parentId) =>
     containers.filter(c => c.parent_id === parentId);
@@ -18,7 +34,6 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
     setDeleting(true);
     setDeleteError(null);
     try {
-      const { containers: containersApi } = await import('../api/client');
       await containersApi.delete(containerId, { deleteItems });
       setDeletingContainer(null);
       onMoved?.();
@@ -30,9 +45,10 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
   };
 
   const handleAddChild = async (parentId) => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || adding) return;
+    setAdding(true);
+    setAddError(null);
     try {
-      const { containers: containersApi } = await import('../api/client');
       await containersApi.create({
         room_id: roomId,
         parent_id: parentId,
@@ -41,9 +57,10 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
       setAddingTo(null);
       setNewName('');
       setExpanded(prev => ({ ...prev, [parentId]: true }));
+      onMoved?.();
     } catch (err) {
-      console.error('Failed to create container:', err);
-    }
+      setAddError(err.message);
+    } finally { setAdding(false); }
   };
 
   const renderContainer = (container, depth = 0) => {
@@ -54,31 +71,28 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
     return (
       <div key={container.id}>
         <div
-          onClick={() => onSelect?.(container.id)}
           className={`group/row w-full min-w-0 flex items-center gap-2 px-3 py-2 rounded-md transition-colors overflow-hidden cursor-pointer ${
             isSelected
               ? 'bg-surface-800 text-primary-400'
               : 'text-surface-300 hover:bg-surface-800'
           }`}
-          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+          style={{ paddingLeft: `${Math.min(depth, 4) * 12 + 4}px` }}
         >
-          {children.length > 0 ? (
+          <button type="button" className="shrink-0 min-w-8 min-h-11 grid place-items-center" onClick={() => setExpanded(previous => ({ ...previous, [container.id]: !isExpanded }))} aria-expanded={!!isExpanded} aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${container.name}`}>
             <svg
               className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
               fill="none" stroke="currentColor" viewBox="0 0 24 24"
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
-          ) : (
-            <span className="w-4" />
-          )}
+          </button>
           <svg className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-primary-500' : 'text-surface-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
-          <span className="text-sm truncate min-w-0 flex-1">{container.name}</span>
+          <button type="button" className="text-sm text-left truncate min-w-0 flex-1 min-h-11" onClick={() => onSelect?.(container.id)} aria-pressed={isSelected}>{container.name}</button>
           <button
             onClick={(e) => { e.stopPropagation(); setMoveContainerId(container.id); }}
-            className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 p-1 text-surface-500 hover:text-primary-400 transition-all flex-shrink-0"
+            className="min-w-9 min-h-11 grid place-items-center text-surface-400 hover:text-primary-400 flex-shrink-0"
             aria-label={`Move ${container.name}`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -87,7 +101,7 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeletingContainer(container); }}
-            className="opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 p-1 text-surface-500 hover:text-red-400 transition-all flex-shrink-0"
+            className="min-w-9 min-h-11 grid place-items-center text-surface-400 hover:text-red-400 flex-shrink-0"
             aria-label={`Delete ${container.name}`}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -103,23 +117,26 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
         )}
 
         {isExpanded && (
-          <div className="flex items-center gap-2 px-3 py-1" style={{ paddingLeft: `${(depth + 1) * 16 + 12}px` }}>
+          <div className="flex items-center gap-2 px-3 py-1" style={{ paddingLeft: `${Math.min(depth + 1, 4) * 12 + 4}px` }}>
             {addingTo === container.id ? (
               <form onSubmit={(e) => { e.preventDefault(); handleAddChild(container.id); }} className="flex gap-1 flex-1">
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="New container…"
+                  aria-label="New container name"
+                  maxLength={255}
+                  disabled={adding}
                   className="input-field text-sm py-1.5 flex-1"
                   autoFocus
                 />
-                <button type="submit" className="btn-primary text-xs px-2.5">Add</button>
-                <button type="button" onClick={() => setAddingTo(null)} className="btn-secondary text-xs px-2.5">✕</button>
+                <button type="submit" disabled={adding || !newName.trim()} className="btn-primary text-xs px-2.5">{adding ? 'Saving…' : 'Add'}</button>
+                <button type="button" disabled={adding} onClick={() => setAddingTo(null)} className="btn-secondary text-xs px-2.5" aria-label="Cancel new container"><Icon name="close" className="w-4 h-4" /></button>
               </form>
             ) : (
               <button
-                onClick={() => setAddingTo(container.id)}
-                className="font-mono text-[0.62rem] uppercase tracking-wider text-surface-500 hover:text-primary-400 flex items-center gap-1 transition-colors"
+                onClick={() => { setAddingTo(container.id); setAddError(null); }}
+                className="min-h-11 text-sm text-surface-400 hover:text-primary-400 flex items-center gap-2 transition-colors"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -138,10 +155,9 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
 
   if (containers.length === 0) return null;
 
-  if (containers.length === 0) return null;
-
   return (
     <div className="space-y-0.5 min-w-0">
+      {addError && <p role="alert" className="text-sm text-red-300 px-3 py-2">{addError}</p>}
       {rootContainers.map(container => renderContainer(container))}
       {moveContainerId != null && (
         <MovePicker
@@ -152,17 +168,9 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
           onClose={() => setMoveContainerId(null)}
         />
       )}
-      {deletingContainer != null && createPortal(
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => !deleting && setDeletingContainer(null)}
-        >
-          <div
-            className="card w-full max-w-md animate-rise mx-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="eyebrow mb-1">Delete container</p>
-            <h3 className="font-display text-xl font-semibold text-surface-100 mb-2">
+      {deletingContainer != null && (
+        <Modal labelledBy="delete-container-title" busy={deleting} onClose={() => setDeletingContainer(null)}>
+            <h3 id="delete-container-title" className="font-display text-xl font-semibold text-surface-100 mb-2">
               Delete “{deletingContainer.name}”?
             </h3>
             <p className="text-sm text-surface-400 mb-4">
@@ -202,14 +210,13 @@ export default function ContainerTree({ containers, selectedId, onSelect, onAddC
                 type="button"
                 onClick={() => setDeletingContainer(null)}
                 disabled={deleting}
+                autoFocus
                 className="btn-secondary w-full mt-1"
               >
                 Cancel
               </button>
             </div>
-          </div>
-        </div>,
-        document.body,
+        </Modal>
       )}
     </div>
   );

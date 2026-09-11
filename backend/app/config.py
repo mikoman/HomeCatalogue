@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # AI Provider
-    ai_provider: str = os.getenv("AI_PROVIDER", "openai")
+    ai_provider: str = os.getenv("AI_PROVIDER", "ollama")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")

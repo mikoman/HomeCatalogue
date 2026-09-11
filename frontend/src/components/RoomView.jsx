@@ -1,32 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { rooms as roomsApi, items as itemsApi, containers as containersApi, scan } from '../api/client';
-import { compressImage } from '../utils/imageCompression';
+import useScanQueue from '../hooks/useScanQueue';
+import { buildScanAcceptance, reconcileReview, selectedReviewCount as countReviewSelection, containerLocationLabel } from '../utils/scanReview';
 import ItemCard from './ItemCard';
 import ItemDetailLightbox from './ItemDetailLightbox';
 import ContainerTree from './ContainerTree';
 import MovePicker from './MovePicker';
 import { groupItemsByName } from '../utils/groupItems';
-import { normalizeName } from '../utils/normalizeName';
 
-// Persist the active (in-flight / ready / failed) scans per room so the queue
-// re-attaches after navigating away and back or a page refresh. The backend
-// keeps each scan running regardless; this just lets the UI pick them back up.
-const activeScansKey = (roomId) => `homeCatalogue:activeScans:${roomId}`;
-const readActiveScans = (roomId) => {
-  try {
-    return JSON.parse(localStorage.getItem(activeScansKey(roomId)) || '[]');
-  } catch {
-    return [];
-  }
-};
-const writeActiveScans = (roomId, sessionIds) =>
-  localStorage.setItem(activeScansKey(roomId), JSON.stringify(sessionIds));
 
-const POLL_INTERVAL_MS = 3000;
-
-// A single scan in the queue. Multiple can exist at once — each is independent.
-// status: 'pending' | 'processing' | 'completed' | 'failed'
 function Thumb({ url }) {
   return url ? (
     <img src={url} alt="Scan" className="w-12 h-12 rounded object-cover flex-shrink-0 border border-surface-800" />
@@ -42,187 +26,152 @@ function Thumb({ url }) {
 
 export default function RoomView() {
   const { roomId } = useParams();
+  return <RoomContent key={roomId} roomId={roomId} />;
+}
+
+function RoomContent({ roomId }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fileInputRef = useRef(null);
-  const timersRef = useRef(new Map());   // per-session poll timers: sessionId -> timeoutId
-  const mountedRef = useRef(false);       // skip the first (empty) persistence write
+  const libraryInputRef = useRef(null);
+  const captureTargetRef = useRef(null);
+  const reviewDialogRef = useRef(null);
+  const reviewContentRef = useRef(null);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(false);
 
   const [room, setRoom] = useState(null);
   const [items, setItems] = useState([]);
   const [containers, setContainers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [scans, setScans] = useState([]);          // Scan[] queue
-  const [scanError, setScanError] = useState(null); // upload-time error (couldn't even enqueue)
+  const { scans, setScans, error: scanError, relocated, addFiles, retryScan, removeScan, refreshScan, getScan } = useScanQueue(roomId);
+  const [loadError, setLoadError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [itemSearch, setItemSearch] = useState('');
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('');
+  const [addingItem, setAddingItem] = useState(false);
+  const [addItemError, setAddItemError] = useState(null);
+  const addingItemRef = useRef(false);
+  const newItemInputRef = useRef(null);
   const [reviewingScanId, setReviewingScanId] = useState(null);
   const [hoveredItem, setHoveredItem] = useState(null);  // item index whose box is highlighted
-  const [selectedContainer, setSelectedContainer] = useState(null);
+  const [selectedContainer, setSelectedContainer] = useState(() => Number(searchParams.get('container')) || null);
   const [filterCategory, setFilterCategory] = useState(null);
   const [selectedItemIds, setSelectedItemIds] = useState(new Set());  // multi-select for item moves
   const [movingItems, setMovingItems] = useState(null);               // number[] when item-move picker is open
   const [selectMode, setSelectMode] = useState(false);                // opt-in selection mode
   const [detailGroup, setDetailGroup] = useState(null);               // grouped item open in the detail lightbox
-  const [pendingScanContainerId, setPendingScanContainerId] = useState(null);
 
-  // Derived queue buckets
-  const inFlight = scans.filter(s => s.status === 'pending' || s.status === 'processing');
-  const ready = scans.filter(s => s.status === 'completed');
-  const failed = scans.filter(s => s.status === 'failed');
-  const reviewingScan = scans.find(s => s.sessionId === reviewingScanId) || null;
 
-  // ---- per-session polling (recursive setTimeout so timers never overlap) ----
-  const clearTimer = useCallback((sessionId) => {
-    const t = timersRef.current.get(sessionId);
-    if (t) clearTimeout(t);
-    timersRef.current.delete(sessionId);
-  }, []);
+  const inFlight = scans.filter(entry => ['waiting', 'preparing', 'uploading', 'pending', 'processing'].includes(entry.status));
+  const ready = scans.filter(entry => entry.status === 'completed');
+  const failed = scans.filter(entry => ['failed', 'upload_failed'].includes(entry.status));
+  const reviewingScan = scans.find(entry => entry.sessionId === reviewingScanId) || null;
+  const reviewIsVisible = Boolean(reviewingScan && room && !loading);
+  const selectedReviewCount = countReviewSelection(reviewingScan);
+  const uploadsPending = scans.some(entry => ['waiting', 'preparing', 'uploading'].includes(entry.status));
 
-  const startPolling = useCallback((sessionId) => {
-    const poll = async () => {
-      try {
-        const data = await scan.getStatus(sessionId);
-        setScans(prev => prev.map(s => s.sessionId === sessionId ? {
-          ...s,
-          status: data.status,
-          // Keep the local blob preview if we have it; fall back to the
-          // backend-served image (re-attaches the thumbnail after a refresh).
-          imageUrl: s.imageUrl || data.image_url,
-          result: data.result,
-          error: data.error,
-        } : s));
-        if (data.status === 'completed' || data.status === 'failed') {
-          clearTimer(sessionId); // terminal — stop polling this scan
-        } else {
-          timersRef.current.set(sessionId, setTimeout(poll, POLL_INTERVAL_MS));
-        }
-      } catch (err) {
-        setScans(prev => prev.map(s => s.sessionId === sessionId
-          ? { ...s, status: 'failed', error: err.message }
-          : s));
-        clearTimer(sessionId);
-      }
-    };
-    poll();
-  }, [clearTimer]);
-
-  // Remove a scan from the queue (after review/discard/dismiss) and revoke its
-  // local blob preview if it had one.
-  const removeScan = useCallback((sessionId, { dismissFailed = false } = {}) => {
-    if (dismissFailed) {
-      scan.dismiss(sessionId).catch(() => {});
-    }
-    setScans(prev => {
-      const s = prev.find(x => x.sessionId === sessionId);
-      if (s?.imageUrl?.startsWith('blob:')) URL.revokeObjectURL(s.imageUrl);
-      return prev.filter(x => x.sessionId !== sessionId);
-    });
-    clearTimer(sessionId);
-  }, [clearTimer]);
-
-  // ---- mount / room switch: load room data + re-attach persisted scans ----
-  useEffect(() => {
-    setLoading(true);
-    loadData();
-    const stored = readActiveScans(roomId);
-    if (stored.length) {
-      setScans(stored.map(id => ({
-        sessionId: id, status: 'pending', imageUrl: null,
-        result: null, error: null, startedAt: Date.now(),
-      })));
-      stored.forEach(id => startPolling(id));
-    } else {
-      setScans([]);
-    }
-    return () => {
-      // Clear every poll timer on unmount / room switch so they don't leak.
-      timersRef.current.forEach(t => clearTimeout(t));
-      timersRef.current.clear();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
-
-  // Persist the active scan ids whenever the queue changes (so a refresh or
-  // navigation re-attaches). Skipped on the very first run to avoid wiping
-  // stored ids before the re-attach effect above has committed them.
-  useEffect(() => {
-    if (!mountedRef.current) { mountedRef.current = true; return; }
-    writeActiveScans(roomId, scans.map(s => s.sessionId));
-  }, [scans, roomId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [roomData, itemsData, containersData] = await Promise.all([
-        roomsApi.get(roomId),
-        itemsApi.list({ room_id: roomId }),
+        roomsApi.get(roomId), itemsApi.list({ room_id: roomId }),
         containersApi.list(roomId, null, { includeAll: true }),
       ]);
+      if (!mountedRef.current) return;
       setRoom(roomData);
       setItems(itemsData);
       setContainers(containersData);
+      setLoadError(null);
+      try { localStorage.setItem('homeCatalogue:lastRoom', String(roomId)); } catch { /* Storage is optional. */ }
     } catch (err) {
-      console.error('Failed to load room:', err);
+      if (mountedRef.current) setLoadError(err.message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
+  }, [roomId]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    loadData();
+    return () => { mountedRef.current = false; };
+  }, [loadData]);
+
+  useEffect(() => {
+    const sessionId = searchParams.get('review');
+    if (sessionId && scans.some(entry => entry.sessionId === sessionId && entry.status === 'completed')) {
+      setReviewingScanId(sessionId);
+      const next = new URLSearchParams(searchParams);
+      next.delete('review');
+      setSearchParams(next, { replace: true });
+    }
+    const itemId = Number(searchParams.get('item'));
+    if (itemId && items.length) {
+      const item = items.find(entry => entry.id === itemId);
+      if (item) setDetailGroup({ name: item.name, items: [item], count: 1 });
+      const next = new URLSearchParams(searchParams);
+      next.delete('item');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams, scans, items]);
+
+  useEffect(() => {
+    if (!reviewIsVisible) return;
+    setSaveError(null);
+    setHoveredItem(null);
+    reviewDialogRef.current?.showModal();
+    if (reviewContentRef.current) reviewContentRef.current.scrollTop = 0;
+  }, [reviewingScanId, reviewIsVisible]);
+
+  const openCapture = (source, containerId = selectedContainer) => {
+    captureTargetRef.current = containerId;
+    (source === 'library' ? libraryInputRef : fileInputRef).current?.click();
   };
 
-  // Take a photo and enqueue a scan. The button is never disabled, so you can
-  // fire off several photos in a row — each becomes its own background scan.
-  const handleScan = async (file, containerId = null) => {
-    setScanError(null);
-    const targetContainerId = containerId ?? pendingScanContainerId;
-    setPendingScanContainerId(null);
-    try {
-      const compressed = await compressImage(file, { maxWidth: 1280, quality: 0.7 });
-      const previewUrl = URL.createObjectURL(compressed);
-      const targetContainer = targetContainerId
-        ? containers.find(c => c.id === targetContainerId)
-        : null;
-      const { scan_session_id } = await scan.upload(roomId, compressed, {
-        containerId: targetContainerId,
-      });
-      setScans(prev => [...prev, {
-        sessionId: scan_session_id,
-        status: 'pending',
-        imageUrl: previewUrl,
-        result: null,
-        error: null,
-        startedAt: Date.now(),
-        containerId: targetContainerId ?? null,
-        containerName: targetContainer?.name ?? null,
-      }]);
-      startPolling(scan_session_id);
-    } catch (err) {
-      setScanError(err.message);
-    }
-  };
+  const openContainerScan = (containerId) => openCapture('camera', containerId);
 
-  const openContainerScan = (containerId) => {
-    setPendingScanContainerId(containerId);
-    fileInputRef.current?.click();
+  const handleFileChange = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!files.length) return;
+    const target = captureTargetRef.current;
+    captureTargetRef.current = null;
+    addFiles(files, target, containers.find(container => container.id === target)?.name || null);
   };
 
   const handleRescan = async (sessionId) => {
     setReviewingScanId(null);
-    setScans(prev => prev.map(s => s.sessionId === sessionId
-      ? { ...s, status: 'pending', result: null, error: null }
-      : s));
-    try {
-      await scan.retry(sessionId);
-      startPolling(sessionId);
-    } catch (err) {
-      setScans(prev => prev.map(s => s.sessionId === sessionId
-        ? { ...s, status: 'failed', error: err.message }
-        : s));
-    }
+    await retryScan(sessionId);
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await handleScan(file);
+  useEffect(() => {
+    if (showAddItem) newItemInputRef.current?.focus();
+  }, [showAddItem]);
+
+  const handleAddItem = async (event) => {
+    event.preventDefault();
+    if (!newItemName.trim() || addingItemRef.current) return;
+    addingItemRef.current = true;
+    setAddingItem(true);
+    setAddItemError(null);
+    try {
+      const item = await itemsApi.create({ room_id: Number(roomId), container_id: selectedContainer, name: newItemName.trim(), category: newItemCategory.trim() || null });
+      setItems(previous => [...previous, item]);
+      setNotice(`${item.name} saved to ${selectedContainerRecord?.name || room.name}.`);
+      setNewItemName('');
+      setNewItemCategory('');
+      setItemSearch('');
+      setFilterCategory(null);
+      newItemInputRef.current?.focus();
+    } catch (err) {
+      setAddItemError(err.message);
+    } finally {
+      addingItemRef.current = false;
+      setAddingItem(false);
     }
-    // Reset so the same file (or camera) can be picked again for the next photo.
-    e.target.value = null;
   };
 
   // ---- multi-select item moves ----
@@ -261,107 +210,49 @@ export default function RoomView() {
     setSelectedItemIds(all);
   };
 
-  // ---- review overlay (operates on the selected scan, not a single global result) ----
   const handleAcceptAll = async () => {
-    if (!reviewingScan?.result) return;
-    const result = reviewingScan.result;
-    const existingContainers = reviewingScan.existingContainers || [];
-    const itemTargets = reviewingScan.itemTargets || [];
-    const containerFlags = reviewingScan.containerFlags || [];
-    const itemSkip = reviewingScan.itemSkip || [];
+    if (!reviewingScan?.existingContainers || savingRef.current || !selectedReviewCount) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
     try {
-      // 1. Build nameToId from existing containers (case-insensitive).
-      const nameToId = {};
-      existingContainers.forEach(c => { nameToId[c.name.toLowerCase()] = c.id; });
-
-      const resolveParentId = (target) => {
-        if (!target || target.kind === 'loose') return null;
-        if (target.kind === 'existing') return target.containerId;
-        if (target.kind === 'proposed') return nameToId[target.name.toLowerCase()] || null;
-        return null;
-      };
-
-      // 2. Create only the proposed containers that don't already exist.
-      for (const container of result.proposed_containers) {
-        if (nameToId[container.name.toLowerCase()] != null) continue;
-        const c = await containersApi.create({
-          room_id: parseInt(roomId),
-          name: container.name,
-          description: container.description,
-        });
-        nameToId[container.name.toLowerCase()] = c.id;
+      const status = await refreshScan(reviewingScanId);
+      if (Number(status.room_id) !== Number(roomId)) {
+        setReviewingScanId(null);
+        return;
       }
-
-      // 3. Promote flagged items to containers; file the rest as items.
-      const itemsToCreate = [];
-      for (let i = 0; i < result.items.length; i++) {
-        const item = result.items[i];
-        if (itemSkip[i]) continue;  // already in room — dedup
-        const target = itemTargets[i] || { kind: 'loose' };
-        if (containerFlags[i]) {
-          if (nameToId[item.name.toLowerCase()] != null) continue;
-          const c = await containersApi.create({
-            room_id: parseInt(roomId),
-            name: item.name,
-            description: '',
-            parent_id: resolveParentId(target),
-          });
-          nameToId[item.name.toLowerCase()] = c.id;
-          continue;
-        }
-        let container_id = null;
-        if (target.kind === 'existing') {
-          container_id = target.containerId;
-        } else if (target.kind === 'proposed') {
-          container_id = nameToId[target.name.toLowerCase()] || null;
-        }
-        itemsToCreate.push({
-          room_id: parseInt(roomId),
-          name: item.name,
-          category: item.category,
-          tags: item.tags,
-          container_id,
-          confidence_score: item.confidence_score,
-          bbox: item.bbox,
-          scan_session_id: reviewingScanId,
-        });
+      if (status.status === 'filed') {
+        setNotice('This photo was already saved.');
+        setReviewingScanId(null);
+        await loadData();
+        return;
       }
-
-      // 4. Bulk-create items, then refresh and close the review.
-      if (itemsToCreate.length > 0) {
-        await itemsApi.bulkCreate({ items: itemsToCreate });
+      if (status.status !== 'completed' || status.result_revision !== reviewingScan.resultRevision) {
+        setSaveError('This photo changed after another analysis. Review the current result before saving.');
+        return;
       }
+      const currentContainers = await containersApi.list(roomId, null, { includeAll: true });
+      const currentReview = reconcileReview(getScan(reviewingScanId), currentContainers, items);
+      setContainers(currentContainers);
+      setScans(previous => previous.map(entry => entry.sessionId === reviewingScanId ? currentReview : entry));
+      const payload = { ...buildScanAcceptance(currentReview), room_id: Number(roomId), expected_revision: status.result_revision };
+      const receipt = await scan.accept(reviewingScanId, payload);
+      const nextReady = ready.find(entry => entry.sessionId !== reviewingScanId);
+      await removeScan(reviewingScanId, { dismiss: false });
+      const savedCounts = [
+        receipt.item_ids.length ? `${receipt.item_ids.length} ${receipt.item_ids.length === 1 ? 'item' : 'items'}` : null,
+        receipt.container_ids.length ? `${receipt.container_ids.length} ${receipt.container_ids.length === 1 ? 'container' : 'containers'}` : null,
+      ].filter(Boolean).join(' and ');
+      setNotice(`${savedCounts} saved to ${room.name}.`);
       await loadData();
-      const id = reviewingScanId;
-      setReviewingScanId(null);
-      removeScan(id);
+      setReviewingScanId(nextReady?.sessionId || null);
     } catch (err) {
-      console.error('Failed to accept scan results:', err);
+      setSaveError(err.message);
+      if (err.status === 409) await refreshScan(reviewingScanId).catch(() => {});
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
-  };
-
-  const handleRejectItem = (index) => {
-    if (!reviewingScan?.result) return;
-    setScans(prev => prev.map(s => {
-      if (s.sessionId !== reviewingScanId) return s;
-      const next = {
-        ...s,
-        result: { ...s.result, items: s.result.items.filter((_, i) => i !== index) },
-      };
-      if (s.itemTargets) {
-        next.itemTargets = s.itemTargets.filter((_, i) => i !== index);
-      }
-      if (s.containerFlags) {
-        next.containerFlags = s.containerFlags.filter((_, i) => i !== index);
-      }
-      if (s.dupeMatches) {
-        next.dupeMatches = s.dupeMatches.filter((_, i) => i !== index);
-      }
-      if (s.itemSkip) {
-        next.itemSkip = s.itemSkip.filter((_, i) => i !== index);
-      }
-      return next;
-    }));
   };
 
   const handleItemSkipChange = (index, skip) => {
@@ -384,60 +275,11 @@ export default function RoomView() {
     } : s));
   };
 
-  // When a scan's review overlay opens, fetch the room's existing containers
-  // and seed a per-item destination (existing | proposed | loose) from the AI's
-  // suggested_container. The user can override each one before accepting.
   useEffect(() => {
-    if (reviewingScanId == null) return;
-    const scan = scans.find(s => s.sessionId === reviewingScanId);
-    if (!scan || !scan.result) return;
-    if (scan.existingContainers) return;  // already initialized
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const existing = await containersApi.list(parseInt(roomId), null, { includeAll: true });
-        if (cancelled) return;
-        const nameToId = {};
-        existing.forEach(c => { nameToId[c.name.toLowerCase()] = c.id; });
-        const proposedNames = (scan.result.proposed_containers || []).map(c => c.name.toLowerCase());
-        const itemTargets = scan.result.items.map(item => {
-          if (scan.containerId) {
-            return { kind: 'existing', containerId: scan.containerId };
-          }
-          const sc = item.suggested_container;
-          if (sc && nameToId[sc.toLowerCase()] != null) {
-            return { kind: 'existing', containerId: nameToId[sc.toLowerCase()] };
-          }
-          if (sc && proposedNames.includes(sc.toLowerCase())) {
-            return { kind: 'proposed', name: sc };
-          }
-          return { kind: 'loose' };
-        });
-        // Dedup: flag detected items that already exist in this room so a
-        // re-scan confirms rather than duplicates. Room-scoped, default-skip.
-        const existingByName = new Map();
-        items.forEach(it => existingByName.set(normalizeName(it.name), it));
-        const dupeMatches = scan.result.items.map(it => existingByName.get(normalizeName(it.name)) || null);
-        const itemSkip = dupeMatches.map(m => m != null);
-
-        setScans(prev => prev.map(s => s.sessionId === reviewingScanId
-          ? {
-            ...s,
-            existingContainers: existing,
-            itemTargets,
-            containerFlags: scan.result.items.map(() => false),
-            dupeMatches,
-            itemSkip,
-          }
-          : s));
-      } catch (err) {
-        console.error('Failed to load existing containers for review:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reviewingScanId, roomId]);
+    if (!reviewingScanId || !room) return;
+    setScans(previous => previous.map(entry => entry.sessionId === reviewingScanId && entry.result
+      ? reconcileReview(entry, containers, items) : entry));
+  }, [reviewingScanId, reviewingScan?.resultRevision, room, containers, items, setScans]);
 
   const handleItemTargetChange = (index, value) => {
     setScans(prev => prev.map(s => {
@@ -454,6 +296,20 @@ export default function RoomView() {
     }));
   };
 
+  const handleProposedChange = (index, field, value) => {
+    setScans(previous => previous.map(entry => {
+      if (entry.sessionId !== reviewingScanId) return entry;
+      if (field === 'skip') return { ...entry, proposedSkip: entry.proposedSkip.map((skip, i) => i === index ? value : skip) };
+      if (field === 'target') return { ...entry, proposedTargets: entry.proposedTargets.map((target, i) => i === index ? value : target) };
+      const oldName = entry.result.proposed_containers[index].name;
+      return {
+        ...entry,
+        result: { ...entry.result, proposed_containers: entry.result.proposed_containers.map((container, i) => i === index ? { ...container, name: value } : container) },
+        itemTargets: entry.itemTargets.map(target => target.kind === 'proposed' && target.name === oldName ? { ...target, name: value } : target),
+      };
+    }));
+  };
+
   const handleContainerFlagChange = (index, isContainer) => {
     setScans(prev => prev.map(s => {
       if (s.sessionId !== reviewingScanId || !s.containerFlags) return s;
@@ -463,25 +319,29 @@ export default function RoomView() {
     }));
   };
 
-  const filteredItems = selectedContainer
+  const locationItems = selectedContainer
     ? items.filter(item => item.container_id === selectedContainer)
     : filterCategory
       ? items.filter(item => item.category === filterCategory)
       : items;
 
+  const filteredItems = locationItems.filter(item => !itemSearch.trim() || `${item.name} ${item.category || ''} ${(item.tags || []).join(' ')}`.toLowerCase().includes(itemSearch.trim().toLowerCase()));
+
   const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
   const selectedContainerRecord = selectedContainer
     ? containers.find(c => c.id === selectedContainer)
     : null;
-  const isEmptyContainerView = selectedContainer && filteredItems.length === 0;
-  const chipBase = 'font-mono text-[0.62rem] uppercase tracking-wider px-2.5 py-1 rounded-sm border transition-colors whitespace-nowrap';
+  const isEmptyContainerView = selectedContainer && locationItems.length === 0;
+  const chipBase = 'text-sm min-h-11 px-3 py-2 rounded-md border transition-colors whitespace-nowrap';
   const chipOn = 'bg-primary-500 text-surface-950 border-primary-500';
   const chipOff = 'bg-surface-900 text-surface-400 border-surface-700 hover:border-surface-600';
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-surface-800 border-t-primary-500"></div>
+      <div className="space-y-4 py-6" role="status">
+        <p className="text-surface-400">Loading room…</p>
+        <div className="h-24 bg-surface-900 rounded-lg animate-pulse" />
+        <div className="h-40 bg-surface-900 rounded-lg animate-pulse" />
       </div>
     );
   }
@@ -489,27 +349,28 @@ export default function RoomView() {
   if (!room) {
     return (
       <div className="card border-red-900 bg-red-950/30">
-        <p className="text-red-400">Room not found.</p>
+        <p className="text-red-400" role="alert">{loadError || 'Room not found.'}</p>
+        <button onClick={loadData} className="btn-primary mt-3">Try again</button>
         <button onClick={() => navigate('/houses')} className="btn-secondary mt-3">Back to index</button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-rise min-w-0 max-w-full">
+    <div className="space-y-6 min-w-0 max-w-full">
       {/* Room header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="min-w-0">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(`/houses/${room.house_id}`)}
             className="font-mono text-[0.7rem] uppercase tracking-wider text-surface-500 hover:text-primary-400 mb-2 flex items-center gap-1.5 transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back
+            House
           </button>
-          <h2 className="font-display text-3xl font-bold tracking-tight text-surface-100 truncate">{room.name}</h2>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-surface-100 break-words">{room.name}</h1>
           {room.description && (
             <p className="text-surface-400 mt-1">{room.description}</p>
           )}
@@ -519,21 +380,25 @@ export default function RoomView() {
             {containers.length} {containers.length === 1 ? 'CONTAINER' : 'CONTAINERS'}
           </p>
         </div>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
         <button
-          onClick={() => fileInputRef.current?.click()}
-          className="btn-primary self-start sm:self-auto relative"
+          onClick={() => openCapture('camera')}
+          className="btn-primary min-h-12 flex-1 sm:flex-none relative"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          Scan area
+          Take photo
           {inFlight.length > 0 && (
             <span className="ml-1 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-surface-950/40 text-[0.65rem] font-mono font-bold text-primary-300">
               {inFlight.length}
             </span>
           )}
         </button>
+          <button onClick={() => openCapture('library')} className="btn-secondary min-h-12 flex-1 sm:flex-none">Choose photos</button>
+          <button onClick={() => setShowAddItem(previous => !previous)} aria-expanded={showAddItem} aria-controls="add-item-form" className="btn-secondary min-h-12 flex-1 sm:flex-none">Add item</button>
+        </div>
       </div>
 
       <input
@@ -545,6 +410,34 @@ export default function RoomView() {
         className="hidden"
       />
 
+      <input ref={libraryInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
+      <p className="text-sm text-surface-400 !mt-3">
+        {selectedContainerRecord ? `New photos go into ${containerLocationLabel(selectedContainerRecord, containers)}.` : 'Photograph a shelf, drawer, or group of items.'} Review the list before saving.
+      </p>
+      {notice && <p role="status" className="text-primary-400">{notice}</p>}
+      {relocated.map(entry => <p key={entry.sessionId} role="status" className="text-surface-300">A scan moved with its container. <button className="underline text-primary-400" onClick={() => navigate(`/rooms/${entry.roomId}?review=${encodeURIComponent(entry.sessionId)}`)}>Open its current room</button></p>)}
+      {loadError && <p role="alert" className="text-red-400">{loadError} <button className="underline" onClick={loadData}>Try again</button></p>}
+      {uploadsPending && <p role="status" className="text-sm text-surface-300">Keep this browser tab open until your photos finish uploading. You can take another photo or open another room.</p>}
+
+      {showAddItem && (
+        <form id="add-item-form" onSubmit={handleAddItem} className="border-y border-surface-700 py-5 space-y-3">
+          <h3 className="text-lg font-semibold text-surface-100">Add an item to {selectedContainerRecord?.name || room.name}</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <label className="flex-1 text-sm text-surface-400">Item name
+              <input disabled={addingItem} ref={newItemInputRef} value={newItemName} onChange={(event) => setNewItemName(event.target.value)} required maxLength={500} className="input-field mt-1 text-base" placeholder="For example, spare house keys" />
+            </label>
+            <label className="sm:w-52 text-sm text-surface-400">Category (optional)
+              <input disabled={addingItem} value={newItemCategory} onChange={(event) => setNewItemCategory(event.target.value)} maxLength={255} className="input-field mt-1 text-base" placeholder="For example, tools" />
+            </label>
+          </div>
+          {addItemError && <p role="alert" className="text-red-400">{addItemError}</p>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary" disabled={addingItem || !newItemName.trim()}>{addingItem ? 'Saving…' : 'Save item'}</button>
+            <button type="button" className="btn-secondary" disabled={addingItem} onClick={() => setShowAddItem(false)}>Done</button>
+          </div>
+        </form>
+      )}
+
       {/* Scan queue — multiple photos can be processing at once; each is
           independent and reviewable on its own. */}
       {scans.length > 0 && (
@@ -552,15 +445,15 @@ export default function RoomView() {
           {/* In-flight scans */}
           {inFlight.length > 0 && (
             <div className="rounded-lg overflow-hidden border border-primary-500/40">
-              <div className="scan-stripes h-2.5" />
+
               <div className="bg-surface-900 divide-y divide-surface-800">
                 {inFlight.map(s => (
                   <div key={s.sessionId} className="px-4 py-3 flex items-center gap-3">
                     <Thumb url={s.imageUrl} />
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-surface-700 border-t-primary-500 flex-shrink-0"></div>
                     <div className="min-w-0">
-                      <p className="font-display font-semibold text-surface-100">Reading the photo…</p>
-                      <p className="eyebrow mt-0.5">AI is identifying and tagging items</p>
+                      <p className="font-semibold text-surface-100" role="status">{{ waiting: 'Waiting to upload', preparing: 'Preparing photo…', uploading: 'Uploading photo…', pending: 'Waiting for analysis…', processing: 'Finding items…' }[s.status]}</p>
+                      <p className="text-sm text-surface-400 mt-0.5">{s.connectionError || s.containerName || 'Your photo will appear here when it is ready.'}</p>
                     </div>
                   </div>
                 ))}
@@ -571,16 +464,16 @@ export default function RoomView() {
           {/* Ready to review */}
           {ready.length > 0 && (
             <div className="space-y-2">
-              <p className="eyebrow">Ready to review · {ready.length}</p>
+              <h3 className="text-lg font-semibold text-surface-100" aria-live="polite">Ready to review · {ready.length}</h3>
               {ready.map(s => (
                 <div key={s.sessionId} className="card flex flex-wrap items-center gap-3 py-3">
                   <Thumb url={s.imageUrl} />
                   <div className="flex-1 min-w-0">
                     <p className="text-surface-100 font-medium">
-                      {s.result?.items.length || 0} {s.result?.items.length === 1 ? 'item' : 'items'} found
+                      {s.result?.items?.length || 0} {s.result?.items?.length === 1 ? 'item' : 'items'} found
                     </p>
                     <p className="text-xs text-surface-500">
-                      {s.result?.proposed_containers.length || 0} {s.result?.proposed_containers.length === 1 ? 'container' : 'containers'}
+                      {s.result?.proposed_containers?.length || 0} {s.result?.proposed_containers?.length === 1 ? 'container' : 'containers'}
                     </p>
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
@@ -598,10 +491,10 @@ export default function RoomView() {
               {failed.map(s => (
                 <div key={s.sessionId} className="card border-red-900 bg-red-950/30 flex flex-wrap items-center gap-3 py-3">
                   <Thumb url={s.imageUrl} />
-                  <p className="text-red-400 text-sm flex-1 min-w-0">Couldn't scan that photo. {s.error}</p>
+                  <p className="text-red-400 text-sm flex-1 min-w-0">The photo needs another attempt. {s.error}</p>
                   <div className="flex gap-2 w-full sm:w-auto">
-                    <Link to="/failed-scans" className="btn-primary flex-1 sm:flex-none text-sm">Retry</Link>
-                    <button onClick={() => removeScan(s.sessionId, { dismissFailed: true })} className="btn-secondary flex-1 sm:flex-none">Dismiss</button>
+                    <button onClick={() => retryScan(s.sessionId)} className="btn-primary flex-1 sm:flex-none">Try again</button>
+                    <button onClick={() => removeScan(s.sessionId)} className="btn-secondary flex-1 sm:flex-none">Dismiss</button>
                   </div>
                 </div>
               ))}
@@ -612,20 +505,20 @@ export default function RoomView() {
 
       {scanError && (
         <div className="card border-red-900 bg-red-950/30">
-          <p className="text-red-400 text-sm">Couldn't start that scan. {scanError}</p>
+          <p className="text-red-400 text-sm" role="alert">{scanError}</p>
         </div>
       )}
 
       {/* Scan result overlay — bound to the selected scan, not a single global result */}
-      {reviewingScan && (
-        <div className="fixed inset-0 bg-surface-950/95 backdrop-blur-sm z-50 flex flex-col safe-top safe-bottom">
+      {reviewingScan && createPortal(
+        <dialog ref={reviewDialogRef} aria-labelledby="scan-review-title" onCancel={(event) => { event.preventDefault(); if (!savingRef.current) setReviewingScanId(null); }} className="fixed inset-0 m-0 w-full h-dvh max-w-none max-h-none bg-surface-950 text-surface-300 p-0 open:flex flex-col safe-top">
           <div className="hazard h-1 w-full shrink-0" />
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div ref={reviewContentRef} className="flex-1 overflow-y-auto min-h-0">
             <div className="max-w-2xl mx-auto px-4 py-6">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
               <div>
-                <p className="eyebrow">Review scan</p>
-                <h3 className="font-display text-2xl font-bold text-surface-100">Confirm the catalogue</h3>
+                <h3 id="scan-review-title" className="font-display text-2xl font-bold text-surface-100">Review your photo</h3>
+                <p className="text-sm text-surface-400 mt-1">Edit names, remove unwanted items, then save.</p>
                 {reviewingScan.containerName && (
                   <p className="text-sm text-surface-400 mt-1">
                     Items will be filed in <span className="text-primary-400">{reviewingScan.containerName}</span>
@@ -635,17 +528,17 @@ export default function RoomView() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => handleRescan(reviewingScanId)}
-                  className="btn-secondary text-sm mr-2"
+                  className="btn-secondary text-sm mr-2" disabled={saving}
                   title="Re-run AI analysis on this photo"
                 >
                   <svg className="w-4 h-4 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  Re-scan
+                  Analyse again
                 </button>
                 <button
                   onClick={() => setReviewingScanId(null)}
-                  className="p-2 -mr-2 text-surface-500 hover:text-surface-200 transition-colors"
+                  className="p-3 text-surface-400 hover:text-surface-200 transition-colors" disabled={saving}
                   aria-label="Close review"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -657,8 +550,8 @@ export default function RoomView() {
 
             {/* Source image */}
             {reviewingScan.imageUrl && (
-              <div className="mb-6">
-                <p className="eyebrow mb-2">Source</p>
+              <details className="mb-6">
+                <summary className="cursor-pointer py-3 text-surface-200">View photo and item locations</summary>
                 <div className="relative rounded-lg overflow-hidden border border-surface-800">
                   <img src={reviewingScan.imageUrl} alt="Scanned area" className="w-full h-auto block" />
                   {/* Detector boxes — normalized 0..1, so % positioning lines up at any size */}
@@ -679,35 +572,17 @@ export default function RoomView() {
                     );
                   })}
                 </div>
-              </div>
-            )}
-
-            {/* New containers to be created (existing ones are filed via the per-item selector) */}
-            {reviewingScan.result?.proposed_containers.length > 0 && (
-              <div className="mb-6">
-                <p className="eyebrow mb-2">New containers · {reviewingScan.result.proposed_containers.length}</p>
-                <div className="space-y-2">
-                  {reviewingScan.result.proposed_containers.map((container, i) => (
-                    <div key={i} className="card flex items-center gap-3 py-3">
-                      <svg className="w-5 h-5 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                      <div>
-                        <p className="text-surface-100 font-medium">{container.name}</p>
-                        {container.description && (
-                          <p className="text-xs text-surface-500">{container.description}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              </details>
             )}
 
             {/* Items to review */}
             <div className="mb-6">
-              <p className="eyebrow mb-2">Discovered items · {reviewingScan.result?.items.length || 0}</p>
-              <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <p className="font-semibold text-surface-100">{selectedReviewCount} selected of {(reviewingScan.result?.items.length || 0) + (reviewingScan.result?.proposed_containers.length || 0)} found</p>
+                <button className="btn-secondary text-sm" disabled={saving} onClick={() => setScans(previous => previous.map(entry => entry.sessionId === reviewingScanId ? { ...entry, itemSkip: entry.result.items.map(() => selectedReviewCount > 0), proposedSkip: entry.result.proposed_containers.map(() => selectedReviewCount > 0) } : entry))}>{selectedReviewCount ? 'Deselect all' : 'Select all'}</button>
+              </div>
+              {reviewingScan.result?.items.length === 0 && reviewingScan.result?.proposed_containers.length === 0 && <p className="py-4 text-surface-300">No items were found. Try a closer photo with more light.</p>}
+              <fieldset disabled={saving} className="space-y-2">
                 {reviewingScan.result?.items.map((item, i) => {
                   const isContainer = reviewingScan.containerFlags?.[i] ?? false;
                   const dupe = reviewingScan.dupeMatches?.[i] || null;
@@ -716,33 +591,28 @@ export default function RoomView() {
                   <div
                     key={i}
                     onMouseEnter={() => setHoveredItem(i)}
+                    onFocus={() => setHoveredItem(i)}
                     onMouseLeave={() => setHoveredItem(null)}
-                    className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'opacity-50' : ''} ${hoveredItem === i && item.bbox ? 'ring-1 ring-primary-500/50' : ''}`}
+                    onBlur={() => setHoveredItem(null)}
+                    className={`card py-3 ${isContainer ? 'border-primary-500/40' : ''} ${skipped ? 'border-dashed' : ''} ${hoveredItem === i && item.bbox ? 'ring-1 ring-primary-500/50' : ''}`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[0.62rem] text-surface-600 w-7 flex-shrink-0">
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
+                      <label className="min-w-11 min-h-11 grid place-items-center cursor-pointer">
+                        <input type="checkbox" checked={!skipped} onChange={(event) => handleItemSkipChange(i, !event.target.checked)} aria-label={`Include ${item.name || `item ${i + 1}`}`} className="w-5 h-5 accent-primary-500" />
+                      </label>
                       <input
                         type="text"
                         value={item.name}
                         onChange={(e) => handleEditItem(i, 'name', e.target.value)}
-                        className="input-field text-sm py-1.5 flex-1"
+                        aria-label={`Item ${i + 1} name`}
+                        maxLength={255}
+                        className="input-field text-base flex-1 min-w-0"
                       />
-                      <button
-                        onClick={() => handleRejectItem(i)}
-                        className="p-1.5 text-surface-500 hover:text-red-400 transition-colors flex-shrink-0"
-                        aria-label="Remove item"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-2 pl-9">
                       {item.category && <span className="tag">{item.category}</span>}
                       {item.suggested_container && !isContainer && (
-                        <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">→ {item.suggested_container}</span>
+                        <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">{item.suggested_container}</span>
                       )}
                       {isContainer && (
                         <span className="tag bg-primary-900/40 text-primary-400 border-primary-900">Container</span>
@@ -751,21 +621,14 @@ export default function RoomView() {
                         <span className="badge-low">Low confidence</span>
                       )}
                     </div>
-                    {dupe && (
-                      <label className="flex items-center gap-2 mt-2 pl-9 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={skipped}
-                          onChange={(e) => handleItemSkipChange(i, e.target.checked)}
-                          className="w-4 h-4 rounded border-surface-600 bg-surface-900 accent-primary-500"
-                        />
-                        <span className="text-sm text-primary-400">
-                          Already in room — skip <span className="text-surface-500">(matches “{dupe.name}”)</span>
-                        </span>
+                    {dupe && <p className="text-sm text-primary-400 mt-2 pl-1">Possible match: “{dupe.name}” is already in this room. Deselect this item if it is the same object.</p>}
+                    <details className="mt-2 pl-1" open={reviewingScan.itemTargets?.[i]?.kind === 'missing' ? true : undefined}>
+                      <summary className="cursor-pointer text-sm text-surface-300 py-2">Location and category</summary>
+                      <label className="block text-sm text-surface-400 mt-2">Category
+                        <input value={item.category || ''} onChange={(event) => handleEditItem(i, 'category', event.target.value)} className="input-field text-base mt-1" maxLength={100} />
                       </label>
-                    )}
                     {reviewingScan.containerFlags && (
-                      <label className="flex items-center gap-2 mt-2 pl-9 cursor-pointer">
+                      <label className="flex items-center gap-2 mt-2 min-h-11 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={isContainer}
@@ -778,24 +641,25 @@ export default function RoomView() {
                     {/* Per-item destination — file items in, or nest containers under */}
                     {reviewingScan.existingContainers && (() => {
                       const target = reviewingScan.itemTargets?.[i] || { kind: 'loose' };
-                      let selectValue = 'loose';
+                      let selectValue = target.kind === 'missing' ? 'missing' : 'loose';
                       if (target.kind === 'existing') selectValue = `existing:${target.containerId}`;
                       else if (target.kind === 'proposed') selectValue = `proposed:${target.name}`;
                       return (
-                        <div className="flex items-center gap-2 mt-2 pl-9">
-                          <span className="font-mono text-[0.62rem] uppercase tracking-wider text-surface-500">
-                            {isContainer ? 'Place under' : 'File in'}
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <span className="text-sm text-surface-400">
+                            {target.kind === 'missing' ? `${target.name} moved or was deleted` : isContainer ? 'Place under' : 'File in'}
                           </span>
                           <select
                             value={selectValue}
                             onChange={(e) => handleItemTargetChange(i, e.target.value)}
-                            className="input-field text-sm py-1 flex-1 min-w-0"
+                            aria-label={`Location for ${item.name}`} className="input-field text-base flex-1 min-w-0"
                           >
+                            {target.kind === 'missing' && <option value="missing" disabled>Choose a new location</option>}
                             <option value="loose">{isContainer ? 'Root in room' : 'Loose in room'}</option>
                             {reviewingScan.existingContainers.length > 0 && (
                               <optgroup label="Existing">
                                 {reviewingScan.existingContainers.map(c => (
-                                  <option key={c.id} value={`existing:${c.id}`}>{c.name}</option>
+                                  <option key={c.id} value={`existing:${c.id}`}>{containerLocationLabel(c, reviewingScan.existingContainers)}</option>
                                 ))}
                               </optgroup>
                             )}
@@ -810,10 +674,32 @@ export default function RoomView() {
                         </div>
                       );
                     })()}
+                    </details>
                   </div>
                   );
                 })}
-              </div>
+                {reviewingScan.result?.proposed_containers.map((container, index) => {
+                  const target = reviewingScan.proposedTargets?.[index] || { kind: 'loose' };
+                  const required = reviewingScan.itemTargets?.some((itemTarget, itemIndex) => !reviewingScan.itemSkip?.[itemIndex] && itemTarget.kind === 'proposed' && itemTarget.name === container.name);
+                  const skipped = reviewingScan.proposedSkip?.[index] && !required;
+                  return <div key={`container-${index}`} className={`card py-3 ${skipped ? 'border-dashed' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <label className="min-w-11 min-h-11 grid place-items-center cursor-pointer">
+                        <input type="checkbox" checked={!skipped} disabled={required || saving} onChange={event => handleProposedChange(index, 'skip', !event.target.checked)} aria-label={`Include container ${container.name}`} className="w-5 h-5 accent-primary-500" />
+                      </label>
+                      <input aria-label={`Container ${index + 1} name`} value={container.name} onChange={event => handleProposedChange(index, 'name', event.target.value)} maxLength={255} className="input-field text-base flex-1 min-w-0" />
+                    </div>
+                    <p className="text-sm text-surface-400 mt-2">New container{required ? ' · used by selected items' : ''}</p>
+                    <label className="block text-sm text-surface-400 mt-3">{target.kind === 'missing' ? `${target.name} moved or was deleted. Choose a new parent.` : 'Place under'}
+                      <select aria-label={`Parent for ${container.name}`} value={target.kind === 'missing' ? 'missing' : target.kind === 'existing' ? String(target.containerId) : 'loose'} onChange={event => handleProposedChange(index, 'target', event.target.value === 'loose' ? { kind: 'loose' } : { kind: 'existing', containerId: Number(event.target.value) })} className="input-field text-base mt-1">
+                        {target.kind === 'missing' && <option value="missing" disabled>Choose a new parent</option>}
+                        <option value="loose">Root in room</option>
+                        {reviewingScan.existingContainers?.map(parent => <option key={parent.id} value={parent.id}>{containerLocationLabel(parent, reviewingScan.existingContainers)}</option>)}
+                      </select>
+                    </label>
+                  </div>;
+                })}
+              </fieldset>
             </div>
 
             </div>
@@ -821,37 +707,27 @@ export default function RoomView() {
 
           {/* Actions — always visible, pinned outside the scroll area */}
           <div className="shrink-0 border-t border-surface-800 bg-surface-950/95 backdrop-blur-sm">
-            <div className="max-w-2xl mx-auto px-4 py-4 flex gap-3 safe-bottom">
+            {saveError && <p role="alert" className="max-w-2xl mx-auto px-4 pt-3 text-red-400">{saveError} Your changes remain here. Try saving again.</p>}
+            <div className="max-w-2xl mx-auto px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex gap-3">
               <button
-                onClick={() => { removeScan(reviewingScanId); setReviewingScanId(null); }}
+                onClick={() => setReviewingScanId(null)} disabled={saving}
                 className="btn-secondary flex-1"
               >
-                Discard
+                Review later
               </button>
               <button
                 onClick={handleAcceptAll}
                 className="btn-primary flex-1"
-                disabled={(reviewingScan.result?.items.length || 0) === 0}
+                disabled={saving || !reviewingScan.existingContainers || selectedReviewCount === 0}
               >
-                {(() => {
-                  const total = reviewingScan.result?.items.length || 0;
-                  let items = 0, containers = 0, skipped = 0;
-                  for (let i = 0; i < total; i++) {
-                    if (reviewingScan.itemSkip?.[i]) { skipped++; continue; }
-                    if (reviewingScan.containerFlags?.[i]) containers++; else items++;
-                  }
-                  const parts = [];
-                  if (items > 0) parts.push(`${items} ${items === 1 ? 'item' : 'items'}`);
-                  if (containers > 0) parts.push(`${containers} ${containers === 1 ? 'container' : 'containers'}`);
-                  const label = `File ${parts.join(', ') || '0 items'}`;
-                  return skipped > 0 ? `${label} · skip ${skipped}` : label;
-                })()}
+                {saving ? 'Saving…' : `Save selected${ready.length > 1 ? ' and review next' : ''}`}
               </button>
             </div>
           </div>
-        </div>
+        </dialog>, document.body
       )}
 
+      {items.length > 0 && <label className="block text-sm text-surface-400">Find in this room<input type="search" value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} className="input-field text-base mt-2" placeholder="Search names, categories, or tags" /></label>}
       {/* Filters */}
       {(containers.length > 0 || categories.length > 0) && (
         <div className="min-w-0 max-w-full overflow-x-auto pb-1 -mx-4 px-4 sm:-mx-6 sm:px-6">
@@ -868,7 +744,7 @@ export default function RoomView() {
               onClick={() => { setFilterCategory(null); setSelectedContainer(selectedContainer === container.id ? null : container.id); }}
               className={`${chipBase} ${selectedContainer === container.id ? chipOn : chipOff}`}
             >
-              {container.name}
+              {containerLocationLabel(container, containers)}
             </button>
           ))}
           {categories.map(category => (
@@ -955,7 +831,7 @@ export default function RoomView() {
           </h3>
           <p className="text-surface-500 mb-5">
             {items.length === 0
-              ? 'Point your camera at a shelf and let the AI do the filing.'
+              ? 'Take a photo of a shelf or drawer. Check the items, then save them here.'
               : isEmptyContainerView
                 ? 'Photograph the inside of this container to catalogue what\'s in there.'
                 : 'Try a different container or category.'}
@@ -964,14 +840,14 @@ export default function RoomView() {
             <button
               onClick={() => isEmptyContainerView
                 ? openContainerScan(selectedContainer)
-                : fileInputRef.current?.click()}
+                : openCapture('camera', null)}
               className="btn-primary mx-auto"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
-              {isEmptyContainerView ? 'Scan inside container' : 'Scan area'}
+              {isEmptyContainerView ? 'Photograph this container' : 'Take photo'}
             </button>
           )}
         </div>

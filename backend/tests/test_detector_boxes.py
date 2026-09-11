@@ -44,6 +44,18 @@ def test_associate_falls_back_to_name_and_leaves_unmatched_none():
     assert items[1].bbox is None  # nothing detected for "widget"
 
 
+def test_bad_optional_detections_do_not_make_review_unsavable():
+    items = [_item("Mug", "mug")]
+    _associate(items, [
+        None,
+        {"label": "mug", "bbox": [0, 0, float("nan"), 1]},
+        {"label": "mug", "bbox": [0, 0, 2, 1]},
+        {"label": "mug", "bbox": [1, 1, 0, 0]},
+        {"label": "mug", "bbox": [0, 0, 0.5, 0.5], "score": 0.8},
+    ])
+    assert items[0].bbox == [0, 0, 0.5, 0.5]
+
+
 def test_capped_jpeg_downscales_and_preserves_aspect(tmp_path):
     src = tmp_path / "big.jpg"
     Image.new("RGB", (2000, 1000), "white").save(src)

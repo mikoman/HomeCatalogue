@@ -28,6 +28,8 @@ async def detect_boxes(image_bytes: bytes, classes: list[str]) -> list[dict]:
                 json={"image_b64": image_b64, "classes": classes},
             )
         resp.raise_for_status()
-        return resp.json().get("detections", [])
+        data = resp.json()
+        detections = data.get("detections") if isinstance(data, dict) else None
+        return detections if isinstance(detections, list) else []
     except (httpx.HTTPError, ValueError, KeyError):
         return []
